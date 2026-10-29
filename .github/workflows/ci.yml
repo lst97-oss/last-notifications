@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: notifications_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      business-postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: business
+          POSTGRES_PASSWORD: business
+          POSTGRES_DB: notifications_business
+        ports:
+          - 5435:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/notifications_test
+      BUSINESS_DATABASE_URL: postgres://business:business@localhost:5435/notifications_business
+      PAYLOAD_SECRET: ci-only-dummy-secret-override-at-runtime-1234567890
+      BETTER_AUTH_SECRET: ci-only-better-auth-secret-override-at-runtime-1234567890
+      BETTER_AUTH_URL: http://localhost:3000
+      PAYLOAD_BUNX_FLAGS: --bun
+      PAYLOAD_CLI_ARGS: --disable-transpile
+      # The build stage runs under NODE_ENV=production, where loopback origins are
+      # rejected — same non-loopback dummy the Dockerfile build stage uses.
+      PAYLOAD_PUBLIC_SERVER_URL: https://example.com
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      # Regenerate gitignored files fresh checkouts lack (routeTree, payload
+      # import map, admin CSS) — typecheck and tests need them.
+      - run: bun run generate-routes
+      - run: bun run generate:types
+      - run: bun run generate:importmap
+      - run: bun run generate:payload-admin-css
+      - run: bun run check
+      - run: bun run db:migrate
+      - run: bun run db:business:migrate
+      - run: bun test
+      # Boot proof: build the node-server output, serve it, and run the
+      # boot-contract smoke against it (/, /admin, me, live, ready).
+      - run: |
+          export NITRO_PRESET=node-server
+          bun run build
+          (bun scripts/start.ts & echo $! > /tmp/template-server.pid)
+          for i in $(seq 1 30); do
+            curl -sf --max-time 2 http://localhost:3000/api/live && break
+            sleep 2
+          done
+          SMOKE_BASE_URL=http://localhost:3000 bun run smoke
+          kill "$(cat /tmp/template-server.pid)"

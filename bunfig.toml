@@ -1,0 +1,30 @@
+[fmt]
+printWidth = 120
+semi = false
+singleQuote = true
+trailingComma = "all"
+ignorePatterns = [
+  "**/*.json",
+  "**/*.jsonc",
+  "**/*.json5",
+  "**/*.md",
+  "**/*.mdx",
+  "**/*.yaml",
+  "**/*.yml",
+  "**/*.toml",
+  ".agents/",
+  "vendor/",
+  "graphify-out/",
+  "src/payload/migrations/",
+]
+
+# bun fmt applies singleQuote to CSS too; keep CSS/SCSS/Less strings double,
+# matching Prettier and the current files.
+[[fmt.overrides]]
+files = ["**/*.css", "**/*.scss", "**/*.less"]
+options = { singleQuote = false }
+
+# Read-only reference clones (gotify/ntfy) carry their own test suites; they are
+# reading material, never part of this project's test run.
+[test]
+pathIgnorePatterns = ["_references/**", "vendor/**"]

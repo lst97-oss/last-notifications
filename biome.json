@@ -1,0 +1,14 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["**", "!**/*.json", "!src/styles", "!src/payload/styles", "!src/payload/migrations", "!src/routeTree.gen.ts", "!vendor", "!.agents", "!_references"]
+  },
+  "formatter": { "enabled": false },
+  "linter": { "enabled": true, "includes": ["src/server/**"], "rules": { "preset": "recommended" } },
+  "assist": {
+    "enabled": true,
+    "includes": ["src/**", "scripts/**", "*.ts"],
+    "actions": { "source": { "organizeImports": { "level": "on", "options": { "sortBareImports": false } } } }
+  }
+}

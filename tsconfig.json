@@ -1,0 +1,28 @@
+{
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["_references", "node_modules", ".output", ".vercel"],
+  "compilerOptions": {
+    "target": "ESNext",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@payload-config": ["./src/payload/payload.config.ts"],
+      "#vendor/*": ["./vendor/*"]
+    },
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "bun-types"],
+
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  }
+}

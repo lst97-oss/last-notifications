@@ -1,0 +1,107 @@
+# Migrations + app + channel worker + WebSocket gateway against your own Postgres.
+# The stack bundles a local Postgres for development; point DATABASE_URL and
+# BUSINESS_DATABASE_URL at a managed server in production (append `?sslmode=...`
+# when that server needs TLS).
+#
+# Secrets have no defaults: set PAYLOAD_SECRET and BETTER_AUTH_SECRET (32+ random
+# characters each) in .env. NODE_ENV defaults to development so a loopback
+# PAYLOAD_PUBLIC_SERVER_URL is accepted; production rejects loopback origins.
+
+name: last-notifications
+
+x-app-environment: &app-environment
+  NODE_ENV: ${NODE_ENV:-development}
+  HOST: 0.0.0.0
+  PORT: "3000"
+  PAYLOAD_SECRET: "${PAYLOAD_SECRET:?set PAYLOAD_SECRET in .env (32+ random characters)}"
+  DATABASE_URL: "${DATABASE_URL:?set DATABASE_URL in .env to your Payload Postgres URL}"
+  BUSINESS_DATABASE_URL: "${BUSINESS_DATABASE_URL:?set BUSINESS_DATABASE_URL in .env to your business Postgres URL}"
+  PAYLOAD_PUBLIC_SERVER_URL: ${PAYLOAD_PUBLIC_SERVER_URL:-http://localhost:3000}
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+  BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (32+ random characters)}"
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  AUTH_BOOTSTRAP_EMAIL: ${AUTH_BOOTSTRAP_EMAIL:-}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:-}
+  WS_PORT: ${WS_PORT:-3001}
+
+x-app-service: &app-service
+  image: ${LAST_NOTIFICATIONS_IMAGE:-last-notifications:local}
+  env_file:
+    - path: .env
+      required: false
+  environment: *app-environment
+  extra_hosts:
+    # Lets a database or SMTP relay on the Docker host answer as host.docker.internal.
+    - host.docker.internal:host-gateway
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo-secret-pw
+      POSTGRES_DB: notifications_demo
+    ports:
+      - '127.0.0.1:5435:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/bootstrap-databases.sh:/docker-entrypoint-initdb.d/bootstrap-databases.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U demo -d notifications_demo']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    <<: *app-service
+    command: ["sh", "-c", "bun run db:migrate && bun run db:business:migrate"]
+    healthcheck:
+      disable: true
+    restart: 'no'
+
+  app:
+    <<: *app-service
+    build:
+      context: .
+      args:
+        BUN_VERSION: ${BUN_VERSION:-1.4.4}
+    ports:
+      # Loopback only: the ingress (tunnel or reverse proxy) reaches the app.
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    <<: *app-service
+    command: ["bun", "scripts/channel-worker.ts"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # WebSocket gateway. The app process cannot hold a WS upgrade (TanStack Start
+  # owns the route tree), so this serves the same stream over a second port and
+  # receives fan-out through Postgres LISTEN/NOTIFY.
+  ws:
+    <<: *app-service
+    command: ["bun", "scripts/realtime-ws.ts"]
+    ports:
+      - "127.0.0.1:${WS_PORT:-3001}:3001"
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:
