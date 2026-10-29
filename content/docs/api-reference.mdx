@@ -1,0 +1,27 @@
+---
+title: API reference
+description: The generated, interactive reference for the business API and the auth API.
+---
+
+The reference is generated from the code. Request bodies and parameters are the schemas the routes validate with, so they cannot drift from the code. Response shapes are declared beside them, and the test suite checks the inbox, recipient, channel and token responses against those shapes.
+
+<Cards>
+  <Card title="Business API" href="/api/reference">
+    Every `/api/v1` route: publish, inbox, recipients, channels, admin. Try a request with your key.
+  </Card>
+  <Card title="Auth API" href="/api/auth/reference">
+    Sign-in, sign-out and session routes, from Better Auth.
+  </Card>
+</Cards>
+
+The raw OpenAPI document for the business API is at `/api/openapi.json`. Import it into any client generator or API tool.
+
+## Notes
+
+- Both pages are served from this origin. They load Scalar from `/scalar/standalone.js`, so they work without a CDN.
+- The business API document covers the publish, inbox, recipient, channel and admin routes. The live stream is listed, but its frames are described in [Realtime](/docs/realtime). The WebSocket gateway is not in the document.
+- The auth document is separate. Its routes are the ones Better Auth provides, and they are not wrapped in the `data` envelope.
+
+## Turning the reference off
+
+Delete the entry from `installedOpenApiPlugins` in `src/server/openapi/config.ts`. That disables the auth reference. It also makes the business reference and the document answer not found.

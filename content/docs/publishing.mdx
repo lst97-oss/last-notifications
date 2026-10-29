@@ -1,0 +1,65 @@
+---
+title: Publishing
+description: The publish body, the channels it routes to, dedupe keys, priority and the limits.
+---
+
+Publish with `POST /api/v1/apps/{appKey}/notifications` and a service key that holds `notifications:create`.
+
+```json
+{
+  "recipientKey": "user-42",
+  "type": "comment.reply",
+  "title": "New reply",
+  "body": "Someone replied to your comment",
+  "data": { "url": "https://app.example.com/thread/9" },
+  "priority": 0,
+  "channels": ["inapp", "email"],
+  "dedupeKey": "reply-9",
+  "email": "user@example.com"
+}
+```
+
+## Fields
+
+| Field | Required | Rules |
+|---|---|---|
+| `recipientKey` | yes | Your opaque id for the user. At most 200 characters. It is not a foreign key into your user table. |
+| `type` | yes | At most 120 characters. Groups notifications, for example `comment.reply`. |
+| `title` | yes | At most 300 characters. |
+| `body` | no | At most 20,000 characters. |
+| `data` | no | A JSON object. At most 16 KiB once serialized, because it is copied into every inbox page and stream frame. |
+| `priority` | no | An integer from -2 to 2. Defaults to 0. |
+| `channels` | no | A non-empty subset of `inapp`, `email`, `webpush` and `webhook`. See below. |
+| `dedupeKey` | no | At most 200 characters. See below. |
+| `email` | no | A one-shot address for this delivery only. It does not change the recipient's stored email. |
+
+The whole request body is capped at 128 KiB. A larger body is refused before it is parsed.
+
+## Channels
+
+`channels` defaults to `inapp`, `email` and `webpush`. Each channel the notification reaches gets its own delivery. `inapp` is the inbox row itself and has no delivery of its own.
+
+`webhook` is opt-in. It is delivered only when a publish names it, so existing publishers never create webhook deliveries.
+
+A channel is dropped in either of two cases:
+
+- the app has switched it off at `/dashboard/apps`
+- the recipient has opted out of it through its preferences
+
+Channels are covered in detail under [Channels](/docs/channels).
+
+## Dedupe keys
+
+A publish with a `dedupeKey` that the recipient already has returns the original `id` with `duplicate: true`, and enqueues nothing. Use a key that is stable for the event, such as the comment id, so a retried request cannot send twice.
+
+## Priority
+
+`priority` is an integer from -2 to 2, stored with the notification and returned with it. The server does not reorder inboxes by it. Your UI decides what to do with the value.
+
+## Styling data
+
+Some channels read presentation values from `data`. The email channel uses `data.url` as the button target, and `data.email` for theme options. Each channel validates its own keys. Unknown keys are dropped, so a publisher cannot smuggle fields into a provider payload.
+
+## Responses
+
+A publish answers Accepted with the notification's `id`, whether it is a duplicate, and the `channels` it was routed to. Failures follow [Errors](/docs/errors). A body that fails validation returns the validation error with the path of each problem.

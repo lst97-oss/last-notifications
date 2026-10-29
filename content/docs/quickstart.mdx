@@ -1,0 +1,81 @@
+---
+title: Quickstart
+description: Create an app, publish a notification, and read it back from the inbox.
+---
+
+This walks through one publish and one read against a running server. Start the server first with [Self-hosting](/docs/self-hosting).
+
+<Steps>
+<Step>
+
+### Create an app
+
+Sign in to the dashboard and open `/dashboard/apps`. Create an app with a name and the origin of the site that will publish. The app's key is listed there. That key is the `appKey` in every URL below.
+
+</Step>
+
+<Step>
+
+### Create a publisher key
+
+Open `/dashboard/api-keys`, create a key for your app, and select only `notifications:create` in the scope picker. The key starts with `lnk_` and is shown once. Keep it on your server. It is the only credential that can publish.
+
+</Step>
+
+<Step>
+
+### Publish a notification
+
+Send the notification from your server with the key as a bearer token:
+
+```bash
+curl -X POST "https://notify.example.com/api/v1/apps/$APP_KEY/notifications" \
+  -H "Authorization: Bearer $LNK_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "recipientKey": "user-42",
+    "type": "comment.reply",
+    "title": "New reply",
+    "body": "Someone replied to your comment",
+    "data": { "url": "https://app.example.com/thread/9" }
+  }'
+```
+
+The response is `{ "data": { "id", "duplicate", "channels" } }`. The `channels` list shows which channels this notification was routed to.
+
+</Step>
+
+<Step>
+
+### Mint a recipient token
+
+Your server mints a short-lived token for the user whose inbox a browser will show. Create a second key with `tokens:create` and `notifications:read`, which is the recommended inbox backend set in [Authentication](/docs/authentication):
+
+```bash
+curl -X POST "https://notify.example.com/api/v1/apps/$APP_KEY/recipients/user-42/token" \
+  -H "Authorization: Bearer $LNK_INBOX_KEY"
+```
+
+Hand the returned `lrt_` token to the page. It expires after 15 minutes. See [Recipient tokens](/docs/recipient-tokens).
+
+</Step>
+
+<Step>
+
+### Read the inbox
+
+The browser reads the inbox with the recipient token:
+
+```bash
+curl "https://notify.example.com/api/v1/apps/$APP_KEY/inbox?order=desc&limit=20" \
+  -H "Authorization: Bearer $LRT_TOKEN"
+```
+
+The page now has the notification, the unread count and the cursor it needs to stay live. See [Realtime](/docs/realtime).
+
+</Step>
+</Steps>
+
+<Callout type="warn" title="Browser calls need a registered origin">
+  Cross-origin requests from a browser are only answered for origins the app has registered. Register the site's origin on the app at `/dashboard/apps`. Your server-to-server calls above are not affected.
+</Callout>

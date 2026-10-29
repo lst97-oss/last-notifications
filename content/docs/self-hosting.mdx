@@ -1,0 +1,94 @@
+---
+title: Self-hosting
+description: Run the server, its worker and its WebSocket gateway, configure the environment, and deploy it.
+---
+
+The server is one application. Two more processes run beside it: the channel worker that delivers email, push and webhooks, and the WebSocket gateway.
+
+## Local setup
+
+```bash
+bun install
+cp .env.example .env   # fill in the secrets below
+bun run db:up          # local Postgres on 127.0.0.1:5435
+bun run db:migrate
+bun run db:business:migrate
+bun run dev            # http://localhost:3000
+```
+
+Then, in three shells:
+
+```bash
+bun run dev             # the app: REST, SSE and the dashboard
+bun run channels:work   # the delivery worker
+bun run ws:serve        # the WebSocket gateway
+```
+
+Open `/create-admin-user` to create the first admin, then `/dashboard`.
+
+The local Postgres creates the `notifications_business` database on an empty volume. On an existing volume, create it once with `createdb` inside the container.
+
+## Two databases
+
+Payload owns `DATABASE_URL`. Identities, apps, API keys, notifications, deliveries and subscriptions live in `BUSINESS_DATABASE_URL`. The two can share one Postgres server, as long as they are separate databases. Business schema changes are committed migrations, applied with `bun run db:business:migrate`. They never run at app boot.
+
+## Environment
+
+| Variable | Purpose |
+|---|---|
+| `PAYLOAD_SECRET` | Payload's secret, 32 or more random characters. Required. |
+| `DATABASE_URL` | Payload's Postgres. |
+| `PAYLOAD_PUBLIC_SERVER_URL` | The public origin. Loopback is refused in production. |
+| `BUSINESS_DATABASE_URL` | The business database. Falls back to `DATABASE_URL`. |
+| `BETTER_AUTH_URL` | Auth base URL. |
+| `BETTER_AUTH_SECRET` | Signs auth data and keys the email unsubscribe links. 32 or more characters. |
+| `AUTH_BOOTSTRAP_EMAIL` | The only address allowed to sign up before an instance admin exists. |
+| `SECRET_ENCRYPTION_KEY` | Seals per-app webhook secrets at rest. Base64 of 32 random bytes. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push. Generate with `bunx web-push generate-vapid-keys`. |
+| `SMTP_PASS` | The email channel password. |
+| `WEBHOOK_SIGNING_SECRET` | The fallback webhook signing key, 16 or more characters. Without it the webhook channel refuses to send. |
+| `WEBHOOK_ALLOW_PRIVATE` | Development only. Allows private-network webhook URLs. |
+| `WS_PORT` | The WebSocket gateway port. Defaults to 3001. |
+
+Optional sign-in: set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` together, or not at all.
+
+A channel whose configuration is absent reports as disabled. Publishes skip it, and nothing fails.
+
+## Production
+
+Build and start with the Docker image:
+
+```bash
+docker compose up -d --build
+```
+
+This runs a migration job, then the app, the worker and the gateway. The bundled Postgres is for local runs only. Point `DATABASE_URL` and `BUSINESS_DATABASE_URL` at a managed server in production.
+
+- **A long-lived server.** Streams need one. The image uses the `node-server` preset. The `vercel` preset cannot hold a stream.
+- **Proxies must not buffer streams.** The server sends `x-accel-buffering: no`. Keep that header intact.
+- **Allow the WebSocket upgrade** on the gateway port.
+- **Run one worker.** Several are safe, because rows are claimed with `SKIP LOCKED`, but they compete for the same rows.
+- **Web Push needs HTTPS** on the consuming site. VAPID key rotation forces every browser to resubscribe.
+- **Email needs SPF, DKIM and DMARC** for the configured sender. See [Email](/docs/channels/email).
+
+## Traps
+
+- **A set environment variable beats `.env`.** A shell that exports `PAYLOAD_SECRET=` as empty makes Payload fail even when `.env` is filled in. Unset the variable, or run with `env -u PAYLOAD_SECRET`.
+- **Never set `NODE_ENV` in `.env`.** Bun loads it for the build, so a development value compiles the server bundle for development, and every page then fails in production. Leave it out.
+- **The API reference is public.** `/api/reference` and `/api/openapi.json` need no login and list every route, admin routes included. Remove the entry in `src/server/openapi/config.ts` to turn them off. On a fresh clone, run `bun run generate:scalar` before the reference page is used.
+
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `dev` | The Vite dev server |
+| `generate:scalar` | Copies the Scalar bundle into `public/scalar/`; `dev` and `build` run it |
+| `build`, `start` | Build the production bundle; `start` runs it |
+| `channels:work` | The delivery worker |
+| `ws:serve` | The WebSocket gateway |
+| `db:up` | Local Postgres |
+| `db:migrate` | Payload migrations |
+| `db:business:generate`, `db:business:migrate` | Generate and apply the business migrations |
+| `smoke` | Checks the boot contract against a running server |
+| `check` | Format check, lint and type check |
+| `test` | Unit tests and the integration tests against the business database |

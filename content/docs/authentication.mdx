@@ -1,0 +1,65 @@
+---
+title: Authentication
+description: Service keys, recipient tokens and dashboard sessions, the permission set, and the presets.
+---
+
+Three kinds of caller reach the API, and each uses one credential.
+
+| Caller | Credential | Used for |
+|---|---|---|
+| Your server | Service key, `lnk_…` | Publishing, reading recipients, minting tokens, channel settings |
+| A user's browser | Recipient token, `lrt_…` | Reading one recipient's inbox and stream, and its own preferences |
+| The dashboard | Session cookie | Managing apps, keys, stats and deliveries |
+
+## Service keys
+
+Send a service key as a bearer token, or in the `x-api-key` header:
+
+```http
+Authorization: Bearer lnk_…
+```
+
+A key is issued once and never shown again, so store it when it is created. Keys expire a year after creation by default. Each key is also rate limited to 600 requests a minute by default. Both values are set when the key is created.
+
+A key is either **bound to one app** or **unbound**. An app-bound key can act only inside that app. Unbound keys exist only for the `apps:*` permissions, which manage the instance itself.
+
+## Permissions
+
+A permission is `resource:verb`. The verbs are `create`, `read`, `update` and `delete`. Each route names the permission it needs, and the key must hold it.
+
+| Permission | Grants |
+|---|---|
+| `apps:create`, `apps:read`, `apps:update`, `apps:delete` | Instance keys only: manage apps and their channel switches |
+| `notifications:create` | Publish notifications |
+| `notifications:read` | Read an app's inbox, stream and Web Push key |
+| `notifications:update` | Mark read, archive and restore (key callers name the recipient) |
+| `notifications:delete` | Delete a notification; key callers pass `recipient` in the query |
+| `tokens:create` | Mint a recipient token that reads one recipient's inbox |
+| `recipients:read` | A recipient's masked contact, preferences and push status; list recipients |
+| `recipients:update` | Set a recipient's contact, preferences and push subscriptions |
+| `recipients:delete` | Clear a recipient's contact; remove push subscriptions |
+| `channels:read` | The app's delivery settings, never a secret |
+| `channels:update` | The app's webhook endpoint; rotate its signing secret |
+
+There are no wildcards and no `write` verb. Each permission grants exactly the verb it names.
+
+## Recommended sets
+
+The dashboard's scope picker lets you select any combination. These are the sets we recommend for common jobs.
+
+| Set | Permissions | For |
+|---|---|---|
+| **Publisher** | `notifications:create` | Your server sends notifications |
+| **Inbox backend** | `tokens:create`, `notifications:read` | Your server mints tokens and serves inbox reads |
+| **Integration** | `recipients:read`, `recipients:update`, `recipients:delete`, `channels:read`, `channels:update`, `tokens:create` | A backend that manages recipients and the webhook channel |
+| **Reader** | `notifications:read` | Read-only access to an app's inbox |
+
+Grant the smallest set that covers the job. A publisher key cannot read an inbox, and a reader key cannot publish.
+
+## Recipient tokens
+
+A recipient token is minted server-to-server with `tokens:create`. It lasts 15 minutes, reads one recipient, and cannot publish. The full flow is on [Recipient tokens](/docs/recipient-tokens).
+
+## Sessions
+
+The dashboard signs users in with a session cookie. Admin routes accept only a session, except the apps surface, which also accepts unbound `apps:*` keys as the machine path. Dashboard users must be the instance admin or an administrator of at least one app.

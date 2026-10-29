@@ -1,0 +1,50 @@
+---
+title: Web Push
+description: Browser push with VAPID keys, subscribing a recipient, and the platform requirements.
+---
+
+The Web Push channel delivers to a browser that has subscribed, even when no tab is open. It uses the Web Push protocol with VAPID keys.
+
+## Keys
+
+Generate a key pair once:
+
+```bash
+bunx web-push generate-vapid-keys
+```
+
+Set the three values in the environment:
+
+```bash
+VAPID_PUBLIC_KEY=…
+VAPID_PRIVATE_KEY=…
+VAPID_SUBJECT=mailto:ops@example.com
+```
+
+`VAPID_SUBJECT` must be a `mailto:` or `https:` URL that the push service can contact. Rotating the keys forces every browser to subscribe again.
+
+## Subscribing
+
+The consuming site reads the public key with a recipient token, then registers the browser's subscription:
+
+```http
+GET /api/v1/apps/{appKey}/webpush-public-key
+POST /api/v1/apps/{appKey}/push-subscriptions
+```
+
+The subscribe call takes the browser's endpoint and its `p256dh` and `auth` keys. A recipient can have several subscriptions, one per browser.
+
+To remove one, call `DELETE` on the same path with the endpoint.
+
+## Cleanup
+
+When a push service answers that an endpoint is gone, the server removes it. Endpoints that keep failing are purged after 60 days.
+
+## Platform requirements
+
+- The consuming site must be served over HTTPS.
+- iOS delivers push only to a web app installed to the home screen.
+
+## Styling
+
+The channel reads `data.webpush` for presentation: `icon`, `badge`, `image` and `actions`. Unknown keys are dropped.

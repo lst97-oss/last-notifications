@@ -1,0 +1,79 @@
+---
+title: Webhook
+description: A signed HTTPS POST per recipient, how to verify it, how the secret is issued and rotated, and what the server refuses to call.
+---
+
+The webhook channel posts each notification to a URL, signed so the receiver can check it came from the server. It is opt-in: a publish reaches it only when it names `webhook` in `channels`.
+
+## The request
+
+The server sends a `POST` with a JSON body:
+
+```json
+{
+  "id": "…",
+  "type": "comment.reply",
+  "title": "New reply",
+  "body": "Someone replied to your comment",
+  "data": { "url": "https://app.example.com/thread/9" },
+  "priority": 0,
+  "createdAt": "2026-10-30T09:00:00.000Z",
+  "recipientKey": "user-42",
+  "app": "…"
+}
+```
+
+It also sends these headers:
+
+| Header | Value |
+|---|---|
+| `x-last-notifications-event` | The optional `data.webhook.event`, or `notification` |
+| `x-last-notifications-delivery` | The notification id. Use it to dedupe retries. |
+| `x-last-notifications-signature` | `t=<unix seconds>,v1=<hex>` |
+
+## Verifying
+
+The signature is an HMAC-SHA256, keyed with the signing secret, over the timestamp, a dot, and the raw body:
+
+```ts
+import { createHmac, timingSafeEqual } from 'node:crypto'
+
+export function verifyWebhook(rawBody: string, signature: string, secret: string): boolean {
+  const fields = new Map(signature.split(',').map((part) => part.split('=') as [string, string]))
+  const timestamp = fields.get('t')
+  const received = fields.get('v1')
+  if (!timestamp || !received) return false
+  // Reject stale requests, so a captured request cannot be replayed later.
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex')
+  return expected.length === received.length && timingSafeEqual(Buffer.from(expected), Buffer.from(received))
+}
+```
+
+Verify against the body exactly as it arrived. Parsing and re-serializing it changes the bytes and breaks the signature.
+
+## The signing secret
+
+Each app has its own secret, so one app's receiver cannot verify another app's messages.
+
+- The first call that sets an app's webhook endpoint issues the secret. It is returned once, in that response, and never listed again.
+- Rotating it issues a new secret, returned once. The old secret stops signing immediately, so deploy the new secret to your receiver first.
+- The secret is sealed at rest with `SECRET_ENCRYPTION_KEY`. Losing that key makes stored secrets unreadable.
+
+If an app has no secret of its own, deliveries fall back to `WEBHOOK_SIGNING_SECRET`. The channel refuses to send without a secret of one kind or the other.
+
+## Where it goes
+
+A recipient can have its own webhook URL, set on its contact with a key that holds `recipients:update`. Otherwise deliveries go to the app's endpoint. A recipient token cannot set a webhook URL, because the stored URL decides where the server posts.
+
+## Retries and failures
+
+- Request-timeout, rate-limit and server-error responses are retried with backoff.
+- Other client-error responses dead-letter at once, because retrying them will not help.
+- Redirects are never followed.
+
+## What the server refuses to call
+
+The server resolves the URL and refuses any address that is private, loopback, link-local or a cloud metadata address. The check runs when the connection is made, so a hostname that resolves to a private address is refused too. Only `https` URLs are accepted, unless the development switch below is set.
+
+`WEBHOOK_ALLOW_PRIVATE=true` relaxes both rules for local development against a receiver on your machine. Never set it in production.

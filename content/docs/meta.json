@@ -1,0 +1,16 @@
+{
+  "title": "Docs",
+  "pages": [
+    "index",
+    "quickstart",
+    "authentication",
+    "publishing",
+    "recipient-tokens",
+    "realtime",
+    "channels",
+    "plugins",
+    "self-hosting",
+    "errors",
+    "api-reference"
+  ]
+}

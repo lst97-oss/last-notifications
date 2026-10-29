@@ -1,0 +1,39 @@
+---
+title: Email
+description: SMTP delivery, the default theme, the one-click unsubscribe header, and the deliverability setup.
+---
+
+The email channel sends over SMTP with nodemailer. It is one of the default channels, so a publish reaches email whenever the recipient has an address and has not opted out.
+
+## Configuration
+
+The only secret is the SMTP password, from the environment:
+
+```bash
+SMTP_PASS=…
+```
+
+The provider, sender address and endpoint are set in `src/server/plugins/email/email.config.ts`. They are not secrets, so they live in the code.
+
+For Gmail, generate an App Password under your Google account's 2-Step Verification settings. The account password does not work over SMTP.
+
+## Addresses
+
+A recipient's address is set through the contact route. A publish can also pass `email` to send one message to a different address. That override applies to that delivery only and does not change the stored address.
+
+## Content
+
+The email uses the default theme. A publish can tune it through `data`:
+
+- `data.url` becomes the button that opens the notification.
+- `data.email` takes the styling options: `theme` (`default`) and an optional `accentColor`. Unknown keys are dropped.
+
+## Unsubscribe
+
+Every message carries a `List-Unsubscribe` header that supports one-click unsubscribe, as RFC 8058 describes. Mail clients post to the link without a session, and the recipient's email channel is turned off.
+
+The link is signed with an HMAC keyed by `BETTER_AUTH_SECRET`. Opening the link in a browser shows a confirmation page and changes nothing. Only the POST turns email off. Link previews and mail scanners fetch GET links, so a GET must never unsubscribe anyone.
+
+## Deliverability
+
+Email deliverability is set up outside the server. Publish SPF, DKIM and DMARC records for the sender configured in `email.config.ts`. Without them, many providers will file the messages as spam.

@@ -1,0 +1,51 @@
+---
+title: Realtime
+description: The inbox is the source of truth. Server-Sent Events and the WebSocket gateway are transports over the same cursor.
+---
+
+The REST inbox is the source of truth. The live transports carry the same notifications, in the same order, through the same cursor. Each item has the same fields as the inbox, with no internal ids. A client that loses its connection can resume from its last cursor and receive the gap.
+
+## The cursor
+
+Each notification has a position in the inbox, made of its `created_at` timestamp and its `id`. The cursor is that position encoded as a string. Timestamps keep millisecond precision, so ordering is exact.
+
+The inbox response returns a `latest` cursor for newest-first pages. A client that loads the newest page with `order=desc` and then opens the stream should resume from that `latest` value.
+
+## Server-Sent Events
+
+```http
+GET /api/v1/apps/{appKey}/stream
+Authorization: Bearer lrt_…
+```
+
+The stream is a long-lived `text/event-stream`. Each notification arrives as:
+
+```
+event: notification
+data: {"id":"6f1c2b8e-3d4a-4e5f-9a1b-2c3d4e5f6a7b","type":"comment.reply","title":"New reply","body":"","data":{},"priority":0,"readAt":null,"archivedAt":null,"createdAt":"2026-10-30T10:00:00.000Z"}
+id: <cursor>
+```
+
+To resume, send the last cursor as `Last-Event-ID`. A browser cannot set that header on a new `EventSource`, so the query form works too: `?lastEventId=<cursor>`. A malformed cursor is refused before the stream opens.
+
+A token-backed stream ends when its token expires. Reconnect with a fresh token and the last cursor.
+
+## WebSocket
+
+The gateway runs as its own process, `bun run ws:serve`, on the port set by `WS_PORT`. It defaults to 3001.
+
+```
+WS /api/v1/apps/{appKey}/ws?token=lrt_…
+```
+
+Each frame has the shape `{ "type": "notification", "cursor", "notification" }`, and `notification` is the same item the SSE `data` line carries. To resume after a reconnect, send `{ "type": "resume", "cursor": "<cursor>" }` and the gateway replays the gap.
+
+## How the transports stay in step
+
+When a publish commits, the server notifies the instance it ran on, and Postgres `LISTEN` / `NOTIFY` carries the event to every other instance and to the WebSocket gateway. So a notification published on one instance reaches a stream open on another.
+
+## Deployment requirements
+
+- **A long-lived server.** The streams hold a connection open. The `node-server` preset is the Docker default. The `vercel` preset cannot hold a stream.
+- **No buffering in front of the stream.** The server sends `x-accel-buffering: no`. Reverse proxies must honour it.
+- **WebSocket upgrades allowed.** Your proxy must forward the upgrade on the gateway port.

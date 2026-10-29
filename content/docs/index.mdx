@@ -1,0 +1,37 @@
+---
+title: Documentation
+description: Publish notifications from your app, read them in an inbox or live stream, and deliver them over email, browser push and webhooks.
+---
+
+Last Notifications is a self-hosted, multi-tenant notification server. One instance serves many consuming sites, called **apps**. Each app publishes notifications through a REST API. Its users read them through the inbox, over REST, Server-Sent Events or WebSocket. Closed tabs, email and webhooks are reached by channel plugins that run in a separate worker.
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart">
+    Create an app, publish a notification and read it back.
+  </Card>
+  <Card title="Authentication" href="/docs/authentication">
+    Service keys, the permission set and the presets.
+  </Card>
+  <Card title="Publishing" href="/docs/publishing">
+    The publish body, channels, dedupe keys and priority.
+  </Card>
+  <Card title="Recipient tokens" href="/docs/recipient-tokens">
+    Give a browser read access to one recipient, never the publish key.
+  </Card>
+  <Card title="Realtime" href="/docs/realtime">
+    The inbox cursor, Server-Sent Events and the WebSocket gateway.
+  </Card>
+  <Card title="Channels" href="/docs/channels">
+    In-app, email, browser push and webhook delivery.
+  </Card>
+  <Card title="Self-hosting" href="/docs/self-hosting">
+    Environment, processes, deployment and the traps to avoid.
+  </Card>
+  <Card title="API reference" href="/docs/api-reference">
+    The generated reference for the business API and the auth API.
+  </Card>
+</Cards>
+
+<Callout type="info" title="Responses share one shape">
+  Successful responses are wrapped in `{ "data": ... }`. Failures answer `{ "error": { "code", "message" } }`. See [Errors](/docs/errors).
+</Callout>

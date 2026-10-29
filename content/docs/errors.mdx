@@ -1,0 +1,38 @@
+---
+title: Errors
+description: The response envelope, the request ID header, and every error code the API can return.
+---
+
+Every response is wrapped in one of two shapes.
+
+Success:
+
+```json
+{ "data": { "…": "…" } }
+```
+
+Failure:
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "recipientKey: Enter a recipient key" } }
+```
+
+The `code` is stable and safe to branch on. The `message` is for people, and its wording can change.
+
+## Request IDs
+
+Every response carries an `x-request-id` header. If your request sends its own `x-request-id`, the server echoes it. Otherwise the server generates one. Quote it when you report a problem, because it finds the matching log lines.
+
+## Server errors
+
+Failures that come from the server, rather than from the request, answer a generic message. The real detail is written to the server log only, so internal messages never reach a client.
+
+## Codes
+
+The table below is generated from the same table the routes answer with.
+
+<ErrorTable />
+
+## Responses that are not errors
+
+Probes and the stream do not use the envelope. The stream answers `text/event-stream`. The liveness and readiness probes wrap their report in `data`, and the readiness probe answers with an error status when the database is degraded, so a load balancer can take the instance out of rotation.

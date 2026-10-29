@@ -1,0 +1,30 @@
+---
+title: Channels
+description: The four delivery channels, how a notification reaches each one, and the switches that control them.
+---
+
+A notification reaches a recipient through one or more channels. Each channel is either the inbox itself or an outbox delivery that a worker sends later.
+
+| Channel | How it is delivered | Guide |
+|---|---|---|
+| `inapp` | The inbox row is the delivery. It appears in the inbox, the unread count and the live stream. | This page |
+| `email` | SMTP, sent by the channel worker | [Email](/docs/channels/email) |
+| `webpush` | Browser push (Web Push with VAPID), sent by the worker | [Web Push](/docs/channels/web-push) |
+| `webhook` | A signed HTTPS POST to the recipient's URL, sent by the worker | [Webhook](/docs/channels/webhook) |
+
+## Routing
+
+A publish names its channels in `channels`. The default is `inapp`, `email` and `webpush`. `webhook` is opt-in and is delivered only when a publish names it.
+
+Two switches can drop a channel for a delivery:
+
+- **The app.** An operator can turn a channel off for the whole app at `/dashboard/apps`.
+- **The recipient.** A recipient can opt out of a channel through its preferences. The email unsubscribe link does exactly this.
+
+A channel whose configuration is missing reports as disabled on `/dashboard/apps`. Publishes that name it skip it, and the rest of the publish still goes through.
+
+## Delivery and retries
+
+Async channels go through an outbox. A delivery row is written in the same transaction as the notification. The worker claims rows with `SKIP LOCKED`, holds each claim for 60 seconds, and retries with exponential backoff. After 8 failed attempts the delivery is dead-lettered. Operators inspect and retry dead letters at `/dashboard/deliveries`.
+
+Run the worker in its own process with `bun run channels:work`. See [Self-hosting](/docs/self-hosting).

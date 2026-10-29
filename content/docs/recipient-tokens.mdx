@@ -1,0 +1,47 @@
+---
+title: Recipient tokens
+description: Give a browser read access to one recipient, without ever handing it the publish key.
+---
+
+A browser must never hold your app's publish key. A recipient token is the credential a page uses instead. Your server mints it for one recipient, and the page uses it to read that recipient's inbox.
+
+## Minting
+
+Your server calls the token route with a key that holds `tokens:create`:
+
+```bash
+curl -X POST "https://notify.example.com/api/v1/apps/$APP_KEY/recipients/user-42/token" \
+  -H "Authorization: Bearer $LNK_INBOX_KEY"
+```
+
+The response is `{ "data": { "token", "expiresAt" } }`. The token starts with `lrt_`. It is shown once, and the server stores only a hash of it.
+
+## What a token can do
+
+A token is pinned to one recipient, and it lasts 15 minutes. While it is valid, it can:
+
+- read that recipient's inbox, with its unread count
+- open the live stream for that recipient
+- register and remove browser push subscriptions for that recipient
+- set that recipient's own email address
+- change that recipient's preferences, such as opting out of email
+
+It cannot publish, cannot read another recipient, and cannot manage keys or apps.
+
+## Presenting a token
+
+Send it as a bearer token:
+
+```http
+Authorization: Bearer lrt_…
+```
+
+`EventSource` and WebSocket clients cannot set headers, so the stream and the WebSocket gateway also accept the token in the query string as `?token=lrt_…`.
+
+## Refreshing
+
+A token-backed stream ends when its token expires. The page then mints a new token from your server and reconnects with its last cursor, so no notification is lost. See [Realtime](/docs/realtime) for how the cursor works.
+
+## Browser origins
+
+Browser calls are cross-origin. Register the consuming site's origin on the app at `/dashboard/apps`. The server then echoes that origin on responses, including the preflight for requests with an `Authorization` header. A request from an origin that is not registered gets no CORS headers, so the browser blocks the read.

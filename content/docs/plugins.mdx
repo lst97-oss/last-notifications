@@ -1,0 +1,43 @@
+---
+title: Channel plugins
+description: How to write a channel plugin, the contract it must meet, and how the server loads it.
+---
+
+A channel plugin is a trusted server-side TypeScript module. There is no sandbox and no runtime loader. Installing a plugin means adding it to the install list and deploying.
+
+## The contract
+
+```ts
+type NotificationChannel = {
+  id: string
+  apiVersion: 1
+  channel: NotificationChannelKind        // 'inapp' | 'email' | 'webpush' | 'webhook'
+  migrations?: { folder: string; schema: string }
+  describe: () => ChannelStatus           // enabled + human detail, never a secret
+  send: (input: ChannelSendInput) => Promise<void>
+}
+```
+
+## Rules the host relies on
+
+- `id` equals `channel`. Ids match `^[a-z][a-z0-9-]{1,62}$`. A duplicate id, or an `apiVersion` other than 1, stops the server at boot.
+- Failures throw `ChannelError(code)`, for example `NO_RECIPIENT_ADDRESS`. The code lands in the delivery's `last_error`, so a dead letter explains itself.
+- Secrets come from the environment only, through `definePluginConfig` and `secretFromEnv`. Per-app tuning lives in the app's channel config and is never secret.
+- `describe()` returns operator-facing facts: provider, endpoint, and whether a secret is set. It never returns the secret itself. The app's detail page renders these facts.
+- Presentation is data. Each plugin ships `<id>.style.ts`, a zod schema over `data.<id>`. Unknown keys are dropped, so a publisher cannot smuggle fields into a provider payload.
+- A plugin can add bespoke dashboard UI with `<id>.panel.tsx` beside it. The panel imports UI only, never the plugin's transport code. Without one, the shared panel shell renders.
+- `migrations` points at a folder under `drizzle/plugins/<id>`. The business migration command applies it. DDL never runs at app boot.
+
+## Installing
+
+Add the plugin to `installedNotificationChannels` in `src/server/plugins/config.ts`, then deploy. A plugin with no configuration reports as disabled, and publishes skip it.
+
+## The existing plugins
+
+The repository ships three. Read them as examples before you write your own.
+
+- **Email.** Nodemailer over SMTP, with the default theme and the one-click `List-Unsubscribe` header.
+- **Web Push.** Web Push with VAPID. A push service that answers that an endpoint is gone causes the endpoint to be removed.
+- **Webhook.** The outbound-HTTP reference. Its connect-time address check refuses non-public addresses. Keep that guard whenever you add outbound requests.
+
+See the [channel guides](/docs/channels) for what each one does at runtime.
