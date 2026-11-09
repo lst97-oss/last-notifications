@@ -1,8 +1,8 @@
 // Permissions a notification API key can hold, as `resource:verb` with CRUD verbs. A key
 // grants exactly the listed verbs; none implies another. The key's app binding decides
-// which of them can act, and `apps:*` are instance-only.
+// which of them can act. An app key's `apps:*` act on its own app only.
 export const API_KEY_SCOPES = [
-  'apps:create',
+  'apps:create', // refused on every key: apps are created in the dashboard
   'apps:read',
   'apps:update',
   'apps:delete',
@@ -20,13 +20,82 @@ export const API_KEY_SCOPES = [
 
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number]
 
-// Permissions that only act on an app-bound key. `apps:*` are instance-only.
+// Permissions that only act on an app-bound key. `apps:*` are checked by the apps routes.
 export const APP_SCOPES: readonly ApiKeyScope[] = API_KEY_SCOPES.filter((scope) => !scope.startsWith('apps:'))
 
-// Least privilege for a new key, per binding: read-only instance keys; an app key publishes,
-// reads and updates its own inbox, and cannot delete notifications or mint browser tokens.
-export const DEFAULT_INSTANCE_SCOPES: ApiKeyScope[] = ['apps:read']
-export const DEFAULT_APP_SCOPES: ApiKeyScope[] = ['notifications:create', 'notifications:read', 'notifications:update']
+// A feature is a channel the host uses. It grants the permissions the host's own server needs
+// with the key; the browser then acts through a recipient token minted with tokens:create.
+export const FEATURES = ['inApp', 'email', 'webpush', 'webhook'] as const
+export type Feature = (typeof FEATURES)[number]
+
+// Web Push adds no key permission: the browser subscribes with its own token. Email and webhook need the server
+// to store each recipient's address, which only an app key may do.
+export const FEATURE_SCOPES: Record<Feature, readonly ApiKeyScope[]> = {
+  inApp: ['notifications:create', 'tokens:create'],
+  email: ['recipients:update'],
+  webpush: [],
+  webhook: ['channels:update', 'recipients:update'],
+}
+
+// In-app is the minimum every host needs to show notifications, so it is on by default.
+export const DEFAULT_FEATURES: readonly Feature[] = ['inApp']
+
+// The scopes the selected features need, in picker order.
+export function scopesForFeatures(features: readonly Feature[]): ApiKeyScope[] {
+  return API_KEY_SCOPES.filter((scope) => features.some((feature) => FEATURE_SCOPES[feature].includes(scope)))
+}
+
+// Scopes after one feature is switched. Turning it on adds its scopes and keeps the rest. Turning it
+// off drops the scopes it grants, unless another selected feature still needs them. A scope the feature does
+// not grant is never touched, even one the user ticked by hand.
+export function scopesAfterFeatureToggle(
+  scopes: readonly ApiKeyScope[],
+  nextFeatures: readonly Feature[],
+  feature: Feature,
+): ApiKeyScope[] {
+  const own = FEATURE_SCOPES[feature]
+  if (nextFeatures.includes(feature)) {
+    return API_KEY_SCOPES.filter((scope) => scopes.includes(scope) || own.includes(scope))
+  }
+  const stillNeeded = scopesForFeatures(nextFeatures)
+  return API_KEY_SCOPES.filter(
+    (scope) => scopes.includes(scope) && (!own.includes(scope) || stillNeeded.includes(scope)),
+  )
+}
+
+// The channel names the server reports, mapped to the feature that each one backs.
+const CHANNEL_FEATURES: Record<string, Feature> = {
+  inapp: 'inApp',
+  email: 'email',
+  webpush: 'webpush',
+  webhook: 'webhook',
+}
+
+// The features an app has on. A channel counts only when the server has it installed and the app's switch is on.
+export function featuresOfChannels(
+  channels: readonly { channel: string; installed: boolean; enabled: boolean }[],
+): Feature[] {
+  return FEATURES.filter((feature) =>
+    channels.some((item) => item.installed && item.enabled && CHANNEL_FEATURES[item.channel] === feature),
+  )
+}
+
+// The features and scopes once `enabled` is the selection. Features switch one at a time, and each switch
+// only touches the scopes that feature grants.
+export function applyFeatureSet(
+  current: { features: readonly Feature[]; scopes: readonly ApiKeyScope[] },
+  enabled: readonly Feature[],
+): { features: Feature[]; scopes: ApiKeyScope[] } {
+  let features: Feature[] = [...current.features]
+  let scopes: ApiKeyScope[] = [...current.scopes]
+  for (const feature of FEATURES) {
+    const on = enabled.includes(feature)
+    if (on === features.includes(feature)) continue
+    features = on ? [...features, feature] : features.filter((item) => item !== feature)
+    scopes = scopesAfterFeatureToggle(scopes, features, feature)
+  }
+  return { features, scopes }
+}
 
 export type ScopeResource = 'apps' | 'notifications' | 'tokens' | 'recipients' | 'channels'
 
@@ -38,7 +107,7 @@ export const SCOPE_GROUPS: readonly ScopeGroup[] = [
   {
     resource: 'apps',
     label: 'Apps',
-    scopes: ['apps:create', 'apps:read', 'apps:update', 'apps:delete'],
+    scopes: ['apps:read', 'apps:update', 'apps:delete'],
   },
   {
     resource: 'notifications',
@@ -72,12 +141,12 @@ export const SCOPE_LABELS: Record<ApiKeyScope, string> = {
 }
 
 export const SCOPE_DESCRIPTIONS: Record<ApiKeyScope, string> = {
-  'apps:create': 'Create apps. Instance keys only.',
-  'apps:read': 'List apps and read their channel settings. Instance keys only.',
-  'apps:update': 'Change app names, origins and channel switches. Instance keys only.',
-  'apps:delete': 'Delete apps. Instance keys only.',
+  'apps:create': 'Refused on every key. Create apps in the dashboard.',
+  'apps:read': 'List apps and read their channel settings. App keys see only their own app.',
+  'apps:update': 'Change app names, origins and channel switches. App keys change only their own app.',
+  'apps:delete': 'Delete apps. App keys delete only their own app.',
   'notifications:create': 'Publish notifications.',
-  'notifications:read': "Read an app's inbox, stream, and Web Push key.",
+  'notifications:read': "Read a recipient's inbox and unread count. Name the recipient.",
   'notifications:update': 'Mark notifications read, and archive or restore them.',
   'notifications:delete': 'Delete notifications. Pass the recipient with the key.',
   'tokens:create': 'Mint a browser token that reads one recipient’s inbox.',

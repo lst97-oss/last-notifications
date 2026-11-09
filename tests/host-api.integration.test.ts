@@ -5,7 +5,13 @@ import { eq } from 'drizzle-orm'
 
 import type { ApiKeyScope } from '@/lib/api-key-scopes'
 import { closeBusinessSql, getBusinessDb, getBusinessSql } from '@/server/db/business-sql'
-import { patchAppChannelData } from '@/server/modules/admin/http/admin-apps'
+import {
+  createAppData,
+  getAppChannelsData,
+  listAppsData,
+  patchAppChannelData,
+  updateAppData,
+} from '@/server/modules/admin/http/admin-apps'
 import { openSecret } from '@/server/security/secret-box'
 import { user } from '@/server/db/schema'
 import { ErrorCode, HttpError } from '@/server/http/errors'
@@ -20,6 +26,7 @@ import {
 import {
   deleteNotificationData,
   mintRecipientTokenData,
+  setContactData,
 } from '@/server/modules/notifications/http/notification-handler'
 import {
   clearContactData,
@@ -31,7 +38,6 @@ import {
   setRecipientChannelAddress,
 } from '@/server/modules/notifications/infrastructure/notification-repository'
 import {
-  appChannelSettingSchema,
   contactClearedSchema,
   deletedSchema,
   recipientPageSchema,
@@ -341,35 +347,142 @@ describe('notifications and tokens', () => {
     expect(minted.data.token).toMatch(/^lrt_/)
     recipientTokenSchema.parse(minted.data)
   })
+
+  test('a browser token cannot change a contact address; an app key can', async () => {
+    const minted = await run(() =>
+      mintRecipientTokenData(request(keys.tokens), { appKey: appA.key, recipientKey: 'int-alice' }),
+    )
+    const setContact = (auth: string) =>
+      run(() =>
+        setContactData(
+          new Request(`http://localhost/api/v1/apps/${appA.key}/recipients/int-alice/contact`, {
+            method: 'PUT',
+            headers: { authorization: `Bearer ${auth}`, 'content-type': 'application/json' },
+            body: JSON.stringify({ address: 'alice@example.test' }),
+          }),
+          { appKey: appA.key, recipientKey: 'int-alice' },
+        ),
+      )
+    expect((await setContact(minted.data.token)).code).toBe(ErrorCode.FORBIDDEN.code)
+    expect((await setContact(keys.integration)).data).toEqual({ channel: 'email', address: 'alice@example.test' })
+  })
 })
 
-describe('dashboard channel save', () => {
-  test('a webhook endpoint is checked on save, the same way as on the host route', async () => {
-    const instance = await issueServiceKey({ userId, name: 'instance-updater', appKey: null, scopes: ['apps:update'] })
+describe('apps:* on app-bound keys', () => {
+  const json = { origin: 'http://localhost', 'content-type': 'application/json' }
+
+  test('an app key sees and renames only its own app; an instance key sees all; no key creates an app', async () => {
+    const own = await issue('apps-own', appA, ['apps:read', 'apps:update', 'apps:create'])
+    const instance = await issueServiceKey({ userId, name: 'apps-instance', appKey: null, scopes: ['apps:read'] })
     issued.push({ id: instance.id, secret: instance.key })
-    const patch = (config: unknown) =>
+    const listRequest = (key: string) =>
+      new Request('http://localhost/api/v1/admin/apps', { headers: { authorization: `Bearer ${key}` } })
+
+    const listed = await run(() => listAppsData(listRequest(own)))
+    expect(listed.data.apps.map((app: { key: string }) => app.key)).toEqual([appA.key])
+
+    const everyApp = await run(() => listAppsData(listRequest(instance.key)))
+    expect(everyApp.data.apps.map((app: { key: string }) => app.key)).toEqual(
+      expect.arrayContaining([appA.key, appB.key]),
+    )
+
+    const rename = (app: { key: string }) =>
+      run(() =>
+        updateAppData(
+          new Request(`http://localhost/api/v1/admin/apps/${app.key}`, {
+            method: 'PATCH',
+            headers: { authorization: `Bearer ${own}`, ...json },
+            body: JSON.stringify({ name: `own-${suffix}` }),
+          }),
+          { appKey: app.key },
+        ),
+      )
+    expect((await rename(appB)).code).toBe(ErrorCode.INSUFFICIENT_SCOPE.code)
+    expect((await rename(appA)).code).toBeUndefined()
+
+    const created = await run(() =>
+      createAppData(
+        new Request('http://localhost/api/v1/admin/apps', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${own}`, ...json },
+          body: JSON.stringify({ name: `made-${suffix}`, origin: `https://made-${suffix}.test` }),
+        }),
+      ),
+    )
+    expect(created.code).toBe(ErrorCode.INSUFFICIENT_SCOPE.code)
+
+    const creator = await issueServiceKey({ userId, name: 'apps-creator', appKey: null, scopes: ['apps:create'] })
+    issued.push({ id: creator.id, secret: creator.key })
+    const fromInstance = await run(() =>
+      createAppData(
+        new Request('http://localhost/api/v1/admin/apps', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${creator.key}`, ...json },
+          body: JSON.stringify({ name: `made-by-key-${suffix}`, origin: `https://made-by-key-${suffix}.test` }),
+        }),
+      ),
+    )
+    expect(fromInstance.code).toBe(ErrorCode.INSUFFICIENT_SCOPE.code)
+  })
+})
+
+describe('in-app on the app page', () => {
+  test('the channel list shows in-app as installed, and its switch saves per app', async () => {
+    const reader = await issue('channels-reader', appA, ['apps:read', 'apps:update'])
+    const bearer = { authorization: `Bearer ${reader}` }
+    const inAppOf = async () => {
+      const listed = await run(() =>
+        getAppChannelsData(
+          new Request(`http://localhost/api/v1/admin/apps/${appA.key}/channels`, { headers: bearer }),
+          { appKey: appA.key },
+        ),
+      )
+      return listed.data.channels.find((item: { channel: string }) => item.channel === 'inapp')
+    }
+    const setInApp = (enabled: boolean) =>
       run(() =>
         patchAppChannelData(
           new Request(`http://localhost/api/v1/admin/apps/${appA.key}/channels`, {
             method: 'PATCH',
-            headers: {
-              authorization: `Bearer ${instance.key}`,
-              'content-type': 'application/json',
-              origin: 'http://localhost',
-            },
-            body: JSON.stringify({ channel: 'webhook', config }),
+            headers: { ...bearer, origin: 'http://localhost', 'content-type': 'application/json' },
+            body: JSON.stringify({ channel: 'inapp', enabled }),
           }),
           { appKey: appA.key },
         ),
       )
 
-    const refused = await patch({ endpointUrl: 'https://10.0.0.5/hook' })
-    expect(refused.code).toBe(ErrorCode.VALIDATION_ERROR.code)
+    expect(await inAppOf()).toMatchObject({ installed: true, enabled: true })
+    expect((await setInApp(false)).code).toBeUndefined()
+    expect(await inAppOf()).toMatchObject({ enabled: false })
+    await setInApp(true)
+  })
+})
 
-    const accepted = await patch({ endpointUrl: 'https://saved-from-dashboard.example.test/hook' })
-    expect(accepted.data).toMatchObject({ channel: 'webhook' })
-    appChannelSettingSchema.parse(accepted.data)
+describe('channel config on the channels switch route', () => {
+  test('an app key or an instance key cannot set a webhook address here, so nothing is saved', async () => {
+    const appKeyUpdater = await issue('config-updater-app', appA, ['apps:update'])
+    const instanceUpdater = await issueServiceKey({
+      userId,
+      name: 'config-updater-instance',
+      appKey: null,
+      scopes: ['apps:update'],
+    })
+    issued.push({ id: instanceUpdater.id, secret: instanceUpdater.key })
+    const attack = (key: string) =>
+      run(() =>
+        patchAppChannelData(
+          new Request(`http://localhost/api/v1/admin/apps/${appA.key}/channels`, {
+            method: 'PATCH',
+            headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json', origin: 'http://localhost' },
+            body: JSON.stringify({ channel: 'webhook', config: { endpointUrl: 'https://attacker.example.test/hook' } }),
+          }),
+          { appKey: appA.key },
+        ),
+      )
+
+    expect((await attack(appKeyUpdater)).code).toBe(ErrorCode.INSUFFICIENT_SCOPE.code)
+    expect((await attack(instanceUpdater.key)).code).toBe(ErrorCode.INSUFFICIENT_SCOPE.code)
     const settings = await getAppChannelSettings(appA.id)
-    expect(settings.webhook?.config.endpointUrl).toBe('https://saved-from-dashboard.example.test/hook')
+    expect(settings.webhook?.config.endpointUrl).not.toBe('https://attacker.example.test/hook')
   })
 })

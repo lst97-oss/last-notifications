@@ -5,6 +5,7 @@ import type { ApiKeyRecord } from '@/lib/api-keys'
 import { getBusinessAuth } from '@/server/auth/business-auth'
 import { type BusinessDb, getBusinessDb } from '@/server/db/business-sql'
 import { apiKeyApps, apikey, apps } from '@/server/db/schema'
+import { prefixedBearer } from '@/server/http/credentials'
 import { ErrorCode, HttpError } from '@/server/http/errors'
 import { getAppId } from '@/server/modules/apps/infrastructure/app-repository'
 
@@ -67,15 +68,18 @@ export function permissionsToScopes(permissions: unknown): ApiKeyScope[] {
   return scopes
 }
 
-// The app a key is bound to. Null for an instance key.
-export async function boundAppKeyOf(keyId: string, db: BusinessDb = getBusinessDb()): Promise<string | null> {
+// The app a key is bound to, with its id and key from one query. Null for an instance key.
+export async function boundAppOf(
+  keyId: string,
+  db: BusinessDb = getBusinessDb(),
+): Promise<{ id: string; key: string } | null> {
   const [row] = await db
-    .select({ key: apps.key })
+    .select({ id: apps.id, key: apps.key })
     .from(apiKeyApps)
     .innerJoin(apps, eq(apps.id, apiKeyApps.appId))
     .where(eq(apiKeyApps.apiKeyId, keyId))
     .limit(1)
-  return row?.key ?? null
+  return row ?? null
 }
 
 // Service keys live in `x-api-key` or in `Authorization`. Only the `lnk_` prefix
@@ -86,10 +90,7 @@ const API_KEY_PREFIX = 'lnk_'
 function extractBearer(request: Request): string | null {
   const explicit = request.headers.get('x-api-key')?.trim()
   if (explicit) return explicit
-  const raw = request.headers.get('authorization')?.trim()
-  if (!raw) return null
-  const secret = /^bearer\s+/i.test(raw) ? raw.replace(/^bearer\s+/i, '').trim() : raw
-  return secret.startsWith(API_KEY_PREFIX) ? secret : null
+  return prefixedBearer(request.headers.get('authorization'), API_KEY_PREFIX)
 }
 
 export function hasServiceKey(request: Request): boolean {
@@ -118,17 +119,19 @@ export async function requireServiceKey(
     // Expired, disabled and unknown keys all read as invalid to the caller.
     throw new HttpError(ErrorCode.INVALID_API_KEY)
   }
-  const boundAppKey = await boundAppKeyOf(result.key.id)
+  const bound = await boundAppOf(result.key.id)
+  const boundAppKey = bound?.key ?? null
   if (boundAppKey === null && APP_SCOPES.includes(scope)) {
     throw new HttpError(ErrorCode.INSUFFICIENT_SCOPE, 'API key is not bound to an app')
   }
-  if (boundAppKey !== (appKey ?? null)) {
+  // apps:* skip this check: the apps routes compare the target app themselves (requireAppsKey).
+  if (APP_SCOPES.includes(scope) && boundAppKey !== (appKey ?? null)) {
     throw new HttpError(ErrorCode.INSUFFICIENT_SCOPE, 'API key is not authorized for this app')
   }
   return {
     id: result.key.id,
     appKey: boundAppKey,
-    appId: boundAppKey === null ? null : await getAppId(boundAppKey),
+    appId: bound?.id ?? null,
     name: result.key.name,
     actorUserId: result.key.referenceId,
     scopes: permissionsToScopes(result.key.permissions),

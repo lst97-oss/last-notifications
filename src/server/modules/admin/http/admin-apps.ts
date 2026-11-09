@@ -1,4 +1,5 @@
 import { HttpStatus } from '@lst97-oss/last-httprism'
+import type { ApiKeyScope } from '@/lib/api-key-scopes'
 import { ErrorCode, HttpError } from '@/server/http/errors'
 import { ok } from '@/server/http/response'
 import { assertSameOrigin, isAppAdmin } from '@/server/http/route-guards'
@@ -44,10 +45,22 @@ async function requireAppAdmin(userId: string, appKey: string): Promise<void> {
   }
 }
 
+// apps:read, apps:update and apps:delete on an app key act on its own app only. An instance key
+// manages any app.
+async function requireAppsKey(request: Request, scope: ApiKeyScope, appKey?: string) {
+  const key = await requireServiceKey(request, scope)
+  if (key.appKey === null) return key
+  if (appKey !== undefined && appKey !== key.appKey) {
+    throw new HttpError(ErrorCode.INSUFFICIENT_SCOPE, 'API key is not authorized for this app')
+  }
+  return key
+}
+
 export async function listAppsData(request: Request): Promise<Response> {
   if (hasServiceKey(request)) {
-    await requireServiceKey(request, 'apps:read')
-    return ok({ apps: await listApps() })
+    const key = await requireAppsKey(request, 'apps:read')
+    const apps = await listApps()
+    return ok({ apps: key.appKey === null ? apps : apps.filter((app) => app.key === key.appKey) })
   }
   const userId = await requireDashboardUser(request, 'Sign in to manage apps')
   return ok({ apps: await listVisibleApps(userId) })
@@ -55,10 +68,9 @@ export async function listAppsData(request: Request): Promise<Response> {
 
 export async function createAppData(request: Request): Promise<Response> {
   assertSameOrigin(request, 'App creation must use the application origin')
+  // Apps are created from the dashboard only, so no key may create one.
   if (hasServiceKey(request)) {
-    await requireServiceKey(request, 'apps:create')
-    const body = await parseJsonBody(request, appCreateSchema)
-    return ok(await createApp(null, body), { status: HttpStatus.CREATED.code })
+    throw new HttpError(ErrorCode.INSUFFICIENT_SCOPE, 'Apps are created in the dashboard')
   }
   const userId = await requireDashboardUser(request, 'Sign in to manage apps')
   if (!(await hasInstanceAdmin(userId))) {
@@ -72,7 +84,7 @@ export async function updateAppData(request: Request, params: { appKey: string }
   assertSameOrigin(request, 'App updates must use the application origin')
   const appKey = parseWith(appKeySchema, params.appKey)
   if (hasServiceKey(request)) {
-    await requireServiceKey(request, 'apps:update')
+    await requireAppsKey(request, 'apps:update', appKey)
     return ok(await updateApp(appKey, await parseJsonBody(request, appUpdateSchema)))
   }
   const userId = await requireDashboardUser(request, 'Sign in to manage apps')
@@ -84,7 +96,7 @@ export async function deleteAppData(request: Request, params: { appKey: string }
   assertSameOrigin(request, 'App deletion must use the application origin')
   const appKey = parseWith(appKeySchema, params.appKey)
   if (hasServiceKey(request)) {
-    await requireServiceKey(request, 'apps:delete')
+    await requireAppsKey(request, 'apps:delete', appKey)
     await deleteApp(appKey)
     return ok({ deleted: true })
   }
@@ -97,9 +109,10 @@ export async function deleteAppData(request: Request, params: { appKey: string }
 }
 
 export async function getAppChannelsData(request: Request, params: { appKey: string }): Promise<Response> {
-  if (hasServiceKey(request)) await requireServiceKey(request, 'apps:read')
+  const appKey = parseWith(appKeySchema, params.appKey)
+  if (hasServiceKey(request)) await requireAppsKey(request, 'apps:read', appKey)
   else await requireDashboardUser(request, 'Sign in to manage apps')
-  const app = await getAppByKey(parseWith(appKeySchema, params.appKey))
+  const app = await getAppByKey(appKey)
   if (!app) throw new HttpError(ErrorCode.APP_NOT_FOUND)
   const settings = await getAppChannelSettings(app.id)
   return ok({
@@ -122,7 +135,7 @@ export async function patchAppChannelData(request: Request, params: { appKey: st
   assertSameOrigin(request, 'Channel changes must use the application origin')
   const appKey = parseWith(appKeySchema, params.appKey)
   let userId: string | null = null
-  if (hasServiceKey(request)) await requireServiceKey(request, 'apps:update')
+  if (hasServiceKey(request)) await requireAppsKey(request, 'apps:update', appKey)
   else {
     userId = await requireDashboardUser(request, 'Sign in to manage apps')
     await requireAppAdmin(userId, appKey)
@@ -130,6 +143,10 @@ export async function patchAppChannelData(request: Request, params: { appKey: st
   const appId = await getAppId(appKey)
   if (!appId) throw new HttpError(ErrorCode.APP_NOT_FOUND)
   const body = await parseJsonBody(request, channelPatchSchema)
+  // Keys switch channels on and off here. Config (a webhook address) is set by a dashboard user or the channels route.
+  if (hasServiceKey(request) && body.config !== undefined) {
+    throw new HttpError(ErrorCode.INSUFFICIENT_SCOPE, 'Channel settings need the channels:update scope')
+  }
   // The webhook endpoint gets the host route's check here too, so a bad address is refused on save
   // rather than failing later at send time.
   if (body.channel === 'webhook' && body.config !== undefined) {

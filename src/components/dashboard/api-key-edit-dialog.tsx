@@ -14,8 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FieldLegend, FieldSet } from '@/components/ui/field'
+import { FieldError, FieldLegend, FieldSet } from '@/components/ui/field'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/ui/spinner'
+import { apiKeyEditFormSchema } from '@/lib/admin-schema'
 import { type ApiKeyScope, scopesOfPermissions } from '@/lib/api-key-scopes'
 import type { ApiKeyRecord } from '@/lib/api-keys'
 import { describeApiError, readApiData } from '@/lib/api-response'
@@ -45,6 +47,7 @@ export function ApiKeyEditDialog({ apiKey, onClose }: { apiKey: ApiKeyRecord; on
 
   const form = useForm({
     defaultValues: { scopes: scopesOfPermissions(apiKey.permissions) },
+    validators: { onChange: apiKeyEditFormSchema },
     onSubmit: async ({ value }) => {
       // The mutation keeps the failure in `save.error`, which the dialog shows.
       try {
@@ -60,7 +63,7 @@ export function ApiKeyEditDialog({ apiKey, onClose }: { apiKey: ApiKeyRecord; on
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Edit API key</DialogTitle>
           <DialogDescription>
@@ -70,15 +73,20 @@ export function ApiKeyEditDialog({ apiKey, onClose }: { apiKey: ApiKeyRecord; on
         </DialogHeader>
         <FieldSet>
           <FieldLegend variant="label">Permissions</FieldLegend>
-          <form.Field name="scopes">
-            {(field) => (
-              <ApiKeyScopePicker
-                idPrefix={`edit-${apiKey.id}`}
-                scopes={field.state.value}
-                onChange={field.handleChange}
-              />
-            )}
-          </form.Field>
+          <ScrollArea className="max-h-[calc(100dvh-18rem)] pr-3">
+            <form.Field name="scopes">
+              {(field) => (
+                <>
+                  <ApiKeyScopePicker
+                    idPrefix={`edit-${apiKey.id}`}
+                    scopes={field.state.value}
+                    onChange={field.handleChange}
+                  />
+                  {field.state.meta.isTouched && <FieldError errors={field.state.meta.errors} />}
+                </>
+              )}
+            </form.Field>
+          </ScrollArea>
         </FieldSet>
         {error ? (
           <Alert variant="destructive">

@@ -18,13 +18,22 @@ export function ApiKeyScopePicker({
   onChange: (next: ApiKeyScope[]) => void
 }) {
   const granted = SCOPE_GROUPS.flatMap((group) => group.scopes).filter((scope) => scopes.includes(scope))
+  const selectedIn = (groupScopes: readonly ApiKeyScope[]) =>
+    groupScopes.filter((scope) => scopes.includes(scope)).length
 
   return (
     <div className="flex flex-col gap-3">
       <Accordion multiple keepMounted defaultValue={SCOPE_GROUPS.map((group) => group.resource)}>
         {SCOPE_GROUPS.map((group) => (
           <AccordionItem key={group.resource} value={group.resource}>
-            <AccordionTrigger>{group.label}</AccordionTrigger>
+            <AccordionTrigger>
+              <span className="flex items-center gap-2">
+                {group.label}
+                <span className="font-normal text-muted-foreground tabular-nums">
+                  {selectedIn(group.scopes)}/{group.scopes.length}
+                </span>
+              </span>
+            </AccordionTrigger>
             <AccordionContent>
               <FieldGroup data-slot="checkbox-group">
                 {group.scopes.map((scope) => {
