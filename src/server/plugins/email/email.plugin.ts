@@ -19,12 +19,17 @@ type EmailDeps = {
 // One transporter per process: building one per send leaks SMTP connections.
 let sharedTransport: Pick<Transporter, 'sendMail'> | null = null
 
+// Each SMTP step gives up before the worker's 30-second handler timeout. Otherwise the worker marks the delivery
+// for retry while the first copy is still on its way, and the recipient gets two emails.
+const SMTP_TIMEOUTS = { dnsTimeout: 3_000, connectionTimeout: 5_000, greetingTimeout: 5_000, socketTimeout: 10_000 }
+
 function transportFor(config: EmailConfig): Pick<Transporter, 'sendMail'> {
   if (sharedTransport) return sharedTransport
   sharedTransport = nodemailer.createTransport({
     host: config.host ?? '127.0.0.1',
     port: config.port,
     secure: config.secure,
+    ...SMTP_TIMEOUTS,
     ...(config.user && config.pass ? { auth: { user: config.user, pass: config.pass } } : {}),
   })
   return sharedTransport
