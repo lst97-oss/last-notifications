@@ -48,7 +48,7 @@ channels:work ── SELECT … FOR UPDATE SKIP LOCKED ──> channel.send() �
 ```
 
 - The REST inbox is the source of truth; SSE and WS are transports over the same `(created_at, id)` cursor. A reconnect with `Last-Event-ID` (SSE) or `{"type":"resume","cursor"}` (WS) replays the gap.
-- Async channels go through the outbox: `SKIP LOCKED` claims, a 60 s lease, exponential backoff, dead-letter after 8 attempts. Operators inspect and retry dead letters at `/dashboard/deliveries`.
+- Async channels go through the outbox: `SKIP LOCKED` claims, a lease that spans a full batch of sends (11 minutes), exponential backoff, dead-letter after 8 attempts. Operators inspect and retry dead letters at `/dashboard/deliveries`.
 - Publishes are idempotent per `dedupeKey`; a repeat returns the original id and enqueues nothing.
 
 ## API

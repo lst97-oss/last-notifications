@@ -25,6 +25,6 @@ A channel whose configuration is missing reports as disabled on `/dashboard/apps
 
 ## Delivery and retries
 
-Outbox channels (`email`, `webpush`, `webhook`) go through an outbox. A delivery row is written in the same transaction as the notification. `inapp` is inline: its live-stream push runs right after commit, so it needs no worker. The worker claims rows with `SKIP LOCKED`, holds each claim for 60 seconds, and retries with exponential backoff. After 8 failed attempts the delivery is dead-lettered. Operators inspect and retry dead letters at `/dashboard/deliveries`.
+Outbox channels (`email`, `webpush`, `webhook`) go through an outbox. A delivery row is written in the same transaction as the notification. `inapp` is inline: its live-stream push runs right after commit, so it needs no worker. The worker claims rows with `SKIP LOCKED`, holds each claim for a full batch of sends (11 minutes), and retries with exponential backoff. After 8 failed attempts the delivery is dead-lettered. Operators inspect and retry dead letters at `/dashboard/deliveries`.
 
 In production, run the worker in its own process with `bun run channels:work`. `bun run dev` starts it alongside the app locally. See [Self-hosting](/docs/self-hosting).
