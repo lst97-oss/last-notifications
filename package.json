@@ -8,7 +8,7 @@
     "#vendor/*": "./vendor/*"
   },
   "scripts": {
-    "dev": "bun run generate:scalar && bunx --bun vite dev --port 3002",
+    "dev": "bun run generate:scalar && bun scripts/dev.ts",
     "build": "bun run generate:payload-admin-css && bun run generate:types && bun run generate:importmap && bun run generate:scalar && bunx --bun vite build",
     "start": "bun scripts/start.ts",
     "payload": "bunx payload",
