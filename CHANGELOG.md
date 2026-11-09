@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.2.0
+
+### Breaking
+
+- **Log settings are renamed.** `LOG_PRETTY` and `LOG_VERBOSE` are gone. Use `LOG_LEVEL` (`debug|info|warn|error`), `LOG_FORMAT` (`auto|pretty|json`) and `LOG_COLOR`. JSON lines now carry `msg` and `time`, not `event` and `timestamp`.
+- **Contact addresses need an app key.** A recipient token can no longer set a recipient's email address (`PUT …/contact`). Your server sets it with a key that has `recipients:update`. Ticking Email in the dashboard now adds that permission.
+- **Browser push endpoints must be known push services.** A subscription must be `https` and on a browser push host (`fcm.googleapis.com`, Mozilla, Apple, Windows). Older subscriptions to other hosts are skipped.
+- **`apps:create` is refused everywhere.** Apps are created only in the dashboard, and the dashboard creates app-bound keys only. An existing instance key keeps `apps:read`, `apps:update` and `apps:delete`; it just cannot create.
+
+### Added
+
+- **In-app is a channel plugin, delivered inline.** The inbox row is still the delivery; its `send` pushes the live stream right after the publish commits, so a browser updates without waiting for the worker. A plugin declares `delivery: 'inline'`, and a failed inline send never fails the publish.
+- **Optional Cloudflare Turnstile on sign-in.** Set both `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` and sign-in and sign-up require the challenge. Unset, sign-in stays password-only.
+- **All-time dashboard range.** The range picker adds All, starting at the scope's first notification.
+- **One log format for every process.** The app, both workers, Payload and the Vite/Nitro dev output share the same writer and settings. Secret-named fields and email addresses are redacted before a line is written; a request logs once, on completion.
+- **`bun run dev` also starts the delivery worker**, and stops both when either exits. `bun run ws:serve` stays separate.
+- **The channel worker reports status and backs off.** One line every five minutes with uptime, handled count and queue depth; consecutive failures wait 1s, 2s, … up to 60s.
+- **Graceful shutdown.** The app and gateway drain in-flight work, and the worker hands unsent deliveries back when they stop. Compose grace periods cover each process; `SERVER_SHUTDOWN_TIMEOUT` (default 10s) bounds the app's drain.
+- **The key dialog starts from features.** In-app is on by default (`notifications:create`, `tokens:create`); email adds `recipients:update`; webhook adds `channels:update` and `recipients:update`; web push adds nothing, since the browser subscribes with its own token.
+
+### Changed
+
+- **App-bound keys can manage their own app.** `apps:read`, `apps:update` and `apps:delete` on an app key act on that app only, and a key cannot set channel config through the channel switch route.
+- **A recipient token does more within one recipient.** It reads the inbox and stream and marks, archives, restores and deletes its own notifications; it still cannot set a contact address.
+- **Setup stays open while no admin exists.** An orphan user row no longer locks the first-admin form, and a Google sign-in can no longer close setup without producing an admin.
+
+### Fixed
+
+- The first-admin check looks for an admin account in the user table, not at a count of users. A bootstrap account now becomes the admin.
+- Sign-up is refused once an admin exists.
+- SMTP steps give up before the worker's 30-second timeout, so a slow mail server no longer sends the same email twice.
+- A delivery claim lasts a full batch, so a second worker no longer resends rows that are still in progress.
+- A recipient token is refused before the body is read when it tries to set a contact address, and stored push subscriptions outside a browser push service are skipped rather than called.
+
 ## v0.1.0
 
 Inbox is the in-app surface, and the inbox exposes what a bell needs.
