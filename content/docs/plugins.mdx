@@ -12,6 +12,7 @@ type NotificationChannel = {
   id: string
   apiVersion: 1
   channel: NotificationChannelKind        // 'inapp' | 'email' | 'webpush' | 'webhook'
+  delivery?: 'outbox' | 'inline'          // default 'outbox'; 'inline' is sent at publish time, with no worker
   migrations?: { folder: string; schema: string }
   describe: () => ChannelStatus           // enabled + human detail, never a secret
   send: (input: ChannelSendInput) => Promise<void>
@@ -34,7 +35,9 @@ Add the plugin to `installedNotificationChannels` in `src/server/plugins/config.
 
 ## The existing plugins
 
-The repository ships three. Read them as examples before you write your own.
+The repository ships four. Read them as examples before you write your own.
+
+- **In-app.** The inbox row is the delivery, and the plugin's `send` pushes it to the live stream. It is `inline`, so a browser updates without the worker. Use `inline` only for a channel that must not wait for the worker.
 
 - **Email.** Nodemailer over SMTP, with the default theme and the one-click `List-Unsubscribe` header.
 - **Web Push.** Web Push with VAPID. A push service that answers that an endpoint is gone causes the endpoint to be removed.

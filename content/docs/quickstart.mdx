@@ -16,9 +16,9 @@ Sign in to the dashboard and open `/dashboard/apps`. Create an app with a name a
 
 <Step>
 
-### Create a publisher key
+### Create a key
 
-Open `/dashboard/api-keys`, create a key for your app, and select only `notifications:create` in the scope picker. The key starts with `lnk_` and is shown once. Keep it on your server. It is the only credential that can publish.
+Open `/dashboard/api-keys` and create a key for your app. Keep **In-app** ticked. It grants `notifications:create` to publish and `tokens:create` to mint browser tokens. The key starts with `lnk_` and is shown once. Keep it on your server. See [Permissions](/docs/permissions) for what each feature adds.
 
 </Step>
 
@@ -49,11 +49,11 @@ The response is `{ "data": { "id", "duplicate", "channels" } }`. The `channels` 
 
 ### Mint a recipient token
 
-Your server mints a short-lived token for the user whose inbox a browser will show. Create a second key with `tokens:create` and `notifications:read`, which is the recommended inbox backend set in [Authentication](/docs/authentication):
+Your server mints a short-lived token for the user whose inbox a browser will show. The same key does this, since In-app includes `tokens:create`. To keep publishing and minting apart, create a second key with only `tokens:create`, as described in [Permissions](/docs/permissions):
 
 ```bash
 curl -X POST "https://notify.example.com/api/v1/apps/$APP_KEY/recipients/user-42/token" \
-  -H "Authorization: Bearer $LNK_INBOX_KEY"
+  -H "Authorization: Bearer $LNK_KEY"
 ```
 
 Hand the returned `lrt_` token to the page. It expires after 15 minutes. See [Recipient tokens](/docs/recipient-tokens).

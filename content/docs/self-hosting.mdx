@@ -16,11 +16,9 @@ bun run db:business:migrate
 bun run dev            # http://localhost:3000
 ```
 
-Then, in three shells:
+`bun run dev` runs the app (REST, SSE and the dashboard) and the delivery worker in one terminal. In a second shell, start the WebSocket gateway:
 
 ```bash
-bun run dev             # the app: REST, SSE and the dashboard
-bun run channels:work   # the delivery worker
 bun run ws:serve        # the WebSocket gateway
 ```
 
@@ -66,6 +64,7 @@ This runs a migration job, then the app, the worker and the gateway. The bundled
 
 - **A long-lived server.** Streams need one. The image uses the `node-server` preset. The `vercel` preset cannot hold a stream.
 - **Proxies must not buffer streams.** The server sends `x-accel-buffering: no`. Keep that header intact.
+- **The proxy must set the client address.** Sign-in is rate-limited per IP in production. The server reads `CF-Connecting-IP`, then `X-Real-IP`, and uses the first valid address it finds. Your proxy must overwrite both with the real client address on every request. If it passes a client's own values through, a client can pick a new address for each try and get past the limit.
 - **Allow the WebSocket upgrade** on the gateway port.
 - **Run one worker.** Several are safe, because rows are claimed with `SKIP LOCKED`, but they compete for the same rows.
 - **Web Push needs HTTPS** on the consuming site. VAPID key rotation forces every browser to resubscribe.

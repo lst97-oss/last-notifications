@@ -4,6 +4,7 @@
     "index",
     "quickstart",
     "authentication",
+    "permissions",
     "publishing",
     "recipient-tokens",
     "realtime",

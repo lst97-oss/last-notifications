@@ -17,11 +17,9 @@ bun run db:business:migrate
 bun run dev            # http://localhost:3000
 ```
 
-Then, in three shells:
+`bun run dev` runs the app (REST, SSE and the dashboard) and the email / Web Push delivery worker in one terminal. In a second shell, start the WebSocket gateway:
 
 ```bash
-bun run dev             # app: REST + SSE + dashboard (:3000)
-bun run channels:work   # email / Web Push delivery worker
 bun run ws:serve        # WebSocket gateway (:3001)
 ```
 
@@ -61,9 +59,10 @@ Permissions are `resource:verb` with CRUD verbs (`create`, `read`, `update`, `de
 
 | Permission | Grants |
 |---|---|
-| `apps:create`, `apps:read`, `apps:update`, `apps:delete` | instance keys only: manage apps and their channel switches |
+| `apps:create` | refused on every key: apps are created in the dashboard |
+| `apps:read`, `apps:update`, `apps:delete` | manage apps and their channel switches. Instance keys manage any app; an app key acts on its own app only |
 | `notifications:create` | publish notifications |
-| `notifications:read` | read an app's inbox, stream, Web Push key |
+| `notifications:read` | list a named recipient's inbox and unread count (`?recipient=`) |
 | `notifications:update` | mark read, archive, restore (key callers name the recipient) |
 | `notifications:delete` | delete a notification; key callers pass `?recipient=` |
 | `tokens:create` | mint a browser token that reads one recipient's inbox |
@@ -73,7 +72,9 @@ Permissions are `resource:verb` with CRUD verbs (`create`, `read`, `update`, `de
 | `channels:read` | the app's delivery settings, never a secret |
 | `channels:update` | the app's webhook endpoint; rotate its signing secret |
 
-New keys expire after a year by default and are rate limited to 600 requests a minute by default. Both are set when the key is created. Recommended presets: **publisher** `notifications:create`; **inbox backend** `tokens:create`, `notifications:read`; **integration** `recipients:read`, `recipients:update`, `recipients:delete`, `channels:read`, `channels:update`, `tokens:create`; **reader** `notifications:read`.
+New keys expire after a year by default and are rate limited to 600 requests a minute by default. Both are set when the key is created. The recommended sets, and what each permission lets a key and a recipient token do, are in [`content/docs/permissions.mdx`](content/docs/permissions.mdx).
+
+The dashboard's Create key form ticks what each feature needs: in-app (`notifications:create`, `tokens:create`, on by default), web push needs no extra permission (the subscription comes from the recipient's token), email needs `recipients:update` to store addresses, webhook needs `channels:update` and `recipients:update`.
 
 Every route answers `{ data }` or `{ error: { code, message } }` with `x-request-id`; all `/api/**` responses are `no-store`.
 
@@ -85,13 +86,13 @@ Every route answers `{ data }` or `{ error: { code, message } }` with `x-request
 | `POST /api/v1/apps/:appKey/inbox/archive` | recipient token or `notifications:update` | `{ids}` or `{read:true}` (archive all read); archiving also marks the rows read |
 | `POST /api/v1/apps/:appKey/inbox/restore` | recipient token or `notifications:update` | `{ids}`; moves archived rows back to the inbox |
 | `DELETE /api/v1/apps/:appKey/notifications/:id` | recipient token, or `notifications:delete` with `?recipient=` | remove one |
-| `POST /api/v1/apps/:appKey/recipients/:recipientKey/token` | `tokens:create` | mint a 15-minute read-only browser token (shown once) |
+| `POST /api/v1/apps/:appKey/recipients/:recipientKey/token` | `tokens:create` | mint a 15-minute browser token for one recipient (shown once) |
 | `GET /api/v1/apps/:appKey/stream?lastEventId` | recipient token (`?token=`) | SSE: `event: notification`, `id: <cursor>`; resume with `Last-Event-ID` or `?lastEventId=` |
 | `WS :3001 /api/v1/apps/:appKey/ws?token=` | recipient token | `{type:"notification",cursor,notification}` |
 | `POST /api/v1/apps/:appKey/push-subscriptions` | recipient token or `recipients:update` | register a browser subscription |
 | `DELETE /api/v1/apps/:appKey/push-subscriptions` | recipient token or `recipients:delete` | remove a browser subscription |
 | `GET /api/v1/apps/:appKey/webpush-public-key` | recipient token | VAPID `applicationServerKey` |
-| `PUT /api/v1/apps/:appKey/recipients/:recipientKey/contact` | token self for email; `recipients:update` for webhook | `{channel?: 'email'\|'webhook', address}` (`channel` defaults to `email`); a webhook URL must be `https` and public |
+| `PUT /api/v1/apps/:appKey/recipients/:recipientKey/contact` | `recipients:update` (app key only; a recipient token cannot set it) | `{channel?: 'email'\|'webhook', address}` (`channel` defaults to `email`); a webhook URL must be `https` and public |
 | `DELETE /api/v1/apps/:appKey/recipients/:recipientKey/contact?channel=` | `recipients:delete` | clears one contact channel; repeating it is safe |
 | `PUT /api/v1/apps/:appKey/recipients/:recipientKey/preferences` | token self or `recipients:update` | `{channel, enabled}` opt-out |
 | `GET /api/v1/apps/:appKey/recipients?limit&cursor` | `recipients:read` | keyset page of the app's recipient keys; `next` is the cursor |
@@ -103,7 +104,7 @@ Every route answers `{ data }` or `{ error: { code, message } }` with `x-request
 
 Archived notifications are deleted 30 days after they were archived. The `view=archived` listing hides older rows immediately; the channel worker's hourly pass deletes them, so run `bun run channels:work` in production.
 
-Recipient tokens (`lrt_…`, hashed at rest) exist so a browser never holds the app's publish key. The consuming site mints one server-to-server and hands it to its page; inbox, stream, push-subscribe, contact, and preferences all accept it. Browser calls are cross-origin: register the consuming site's origin on the app (`/dashboard/apps`) and those routes echo it, including `OPTIONS` preflight.
+Recipient tokens (`lrt_…`, hashed at rest) exist so a browser never holds the app's publish key. The consuming site mints one server-to-server and hands it to its page; inbox, stream, push-subscribe, and preferences all accept it. Contact addresses need the app key. Browser calls are cross-origin: register the consuming site's origin on the app (`/dashboard/apps`) and those routes echo it, including `OPTIONS` preflight.
 
 Admin routes (`/api/v1/admin/*`) are session-only for the dashboard — except the apps surface, which also accepts unbound `apps:*` keys as the machine path. Dashboard users must be the instance admin or an admin of ≥1 app.
 
@@ -165,6 +166,7 @@ Business/notification env is read lazily and only where needed:
 | `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET` (32+) | auth base URL + signing/secret key (also keys unsubscribe HMACs) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional Google sign-in pair |
 | `AUTH_BOOTSTRAP_EMAIL` | only address allowed to sign up before an instance admin exists |
+| `TURNSTILE_SECRET_KEY` / `TURNSTILE_SITE_KEY` | optional Cloudflare Turnstile pair; both turn on the sign-in challenge |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push (`bunx web-push generate-vapid-keys`) |
 | `SMTP_PASS` | email channel password; provider, sender, and endpoint are configured in `src/server/plugins/email/email.config.ts` |
 | `WEBHOOK_SIGNING_SECRET` | webhook channel HMAC key, 16+ characters; without it the webhook channel refuses to send |

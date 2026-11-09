@@ -1,0 +1,74 @@
+---
+title: Permissions
+description: What each permission lets a service key and a recipient token do, which features need which permissions, and the smallest set to grant.
+---
+
+Every route names the permission it needs, and the caller must hold it. This page explains what each permission does, which ones a channel needs, and how a recipient token differs from a key.
+
+## How a key is checked
+
+- A permission is `resource:verb`. The verbs are `create`, `read`, `update` and `delete`. A verb never implies another, and there are no wildcards or `write` verb.
+- A key is bound to one app and acts only inside it. Keys you create in the dashboard are always bound to an app.
+- Some routes act on a recipient. A key must name that recipient: `recipient` in the query string, or `recipientKey` in the body. A key can name any recipient in its own app.
+- A request whose key lacks the permission is refused with `INSUFFICIENT_SCOPE`.
+
+## Features
+
+When you create a key in the dashboard, you tick the features your app uses. Each feature adds the permissions its server side needs. You can still change the permissions by hand afterwards.
+
+| Feature | Ticked by default | Adds | Why |
+|---|---|---|---|
+| In-app | Yes | `notifications:create`, `tokens:create` | Publish notifications, and mint the token the browser inbox uses |
+| Email | No | `recipients:update` | Store each recipient's email address (a publish can also carry one) |
+| Web Push | No | nothing | The browser reads the public key and subscribes with its own token |
+| Webhook | No | `channels:update`, `recipients:update` | Set the app's endpoint and signing secret, and each recipient's webhook URL |
+
+Unticking a feature removes the permissions it added, unless another ticked feature still needs them. Permissions you tick by hand are kept.
+
+Web Push needs nothing extra on the key, because the recipient's own token does the browser's part. Email needs `recipients:update` so your server can store each recipient's address. A publish can carry an address without it.
+
+## Permission reference
+
+The third column shows what a [recipient token](/docs/recipient-tokens) can do. A token skips the permission check, but only for its own recipient.
+
+| Permission | A key can | A recipient token can |
+|---|---|---|
+| `notifications:create` | Publish notifications to any recipient | Nothing |
+| `notifications:read` | List a named recipient's inbox and unread count (`recipient` query) | Read its own inbox, unread count and live stream |
+| `notifications:update` | Mark read, archive and restore for a named recipient (`recipientKey` body) | Mark read, archive and restore its own notifications |
+| `notifications:delete` | Delete one notification for a named recipient (`recipient` query) | Delete its own notifications |
+| `tokens:create` | Mint a recipient token for a recipient | Nothing |
+| `recipients:read` | Read a recipient's masked contact, preferences and push status, and list recipients | Nothing |
+| `recipients:update` | Set a recipient's email or webhook address, preferences and push subscriptions | Set its preferences and push subscriptions. Not an email or webhook address |
+| `recipients:delete` | Clear a recipient's contact and remove push subscriptions | Remove its own push subscription |
+| `channels:read` | Read the app's delivery settings, never a secret | Nothing |
+| `channels:update` | Set the app's webhook endpoint and rotate its signing secret | Nothing |
+| `apps:read` | List apps and read their channel settings. An app key sees only its own app | Nothing |
+| `apps:update` | Change an app's name, origin and channel switches. An app key changes only its own app | Nothing |
+| `apps:delete` | Delete an app. An app key deletes only its own app | Nothing |
+| `apps:create` | Nothing. Apps are created only in the dashboard, so a key holding this permission is refused | Nothing |
+
+A key that still holds `apps:create`, such as an instance key created earlier, is refused when it tries to create an app. The dashboard no longer creates keys without an app.
+
+## Why a token needs no inbox permission
+
+The browser inbox works with a recipient token alone. It lists the inbox, marks notifications read, archives and restores them, and opens the stream, all for its own recipient. So the bell itself needs nothing from the key. The server only needs `tokens:create` to mint the token it hands to the page.
+
+The inbox permissions `notifications:read`, `notifications:update` and `notifications:delete` matter for a key acting on a named recipient. Use them for server code that reads or manages another recipient's inbox, such as an admin tool or a cleanup job.
+
+Two routes need a recipient token and cannot be called with a key, because neither names a recipient: the live stream and the Web Push public key.
+
+## Recommended sets
+
+Grant the smallest set that covers the job.
+
+| Set | Permissions | For |
+|---|---|---|
+| **In-app** (dashboard default) | `notifications:create`, `tokens:create` | A site that publishes notifications and shows them in a browser bell |
+| **Publisher** | `notifications:create` | A server that only publishes. Keep this key separate from the minting key |
+| **Minting** | `tokens:create` | A server that only mints recipient tokens |
+| **Server-side inbox** | `notifications:read`, `notifications:update`, `notifications:delete` | Server code that lists, marks or deletes a named recipient's notifications |
+| **Webhook** | `channels:update`, `recipients:update` | A server that sets the webhook endpoint and each recipient's webhook URL |
+| **Integration** | `recipients:read`, `recipients:update`, `recipients:delete`, `channels:read`, `channels:update` | A backend that manages recipients and the webhook channel |
+
+A key with `tokens:create` can mint a token for any recipient in its app, so it can read any recipient's inbox. Keep the minting key on your server, and keep it apart from code that a browser can reach. If you want the separation, create one key for publishing and another for minting.

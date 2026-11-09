@@ -28,6 +28,6 @@ Module map — `http/`: `errors.ts` (`ErrorCode`, `HttpError`, `toHttpError`), `
 ## Conventions
 
 - New-module recipe: `domain/` types + pure fns → `application/` use case with deps param → `infrastructure/` adapters → `http/` split of `getXData` (data) + `handleXGet` (`ok`-wrapped) → route `GET: (ctx) => withContext(async () => getXData())(ctx)`, keeping the literal `server:` key.
-- Log events: `request.start { requestId, method, path }`, `request.complete { requestId, status, latencyMs }`, `request.error { requestId, code, status }`; scope via `logger.child({ requestId })`.
+- Log events: `request.start { requestId, method, path }`, `request.complete { requestId, status, latencyMs }`, `request.error { requestId, code, status }`; scope via `logger.child({ requestId })`. Levels: `request.start` is `debug`; log outcomes, not every step. `LOG_LEVEL` sets the floor (default `info`); `LOG_FORMAT` picks pretty or JSON output and `LOG_COLOR` picks colour (both default `auto`; see `logger-settings.ts`). Failed deliveries are `warn`, a worker that cannot poll is `error` with a backoff.
 - Units: `latencyMs` numbers, `uptimeSeconds` integers; probe timeout 2000 ms (`DB_PROBE_TIMEOUT_MS`).
 - Style: 2-space, 120 cols, single quotes, semicolons as-needed (Biome); lazy singletons, no import-time side effects.
