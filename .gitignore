@@ -60,3 +60,9 @@ graphify-out/cost.json
 graphify-out/cache/
 graphify-out/.graphify_*
 graphify-out/.needs_update
+# Dated snapshots of a run; the root files above are the shared graph
+graphify-out/20*/
+
+# Claude Code scheduler lock and skill-installer backup: per machine, never committed
+.claude/scheduled_tasks.lock
+.claude/skills/**/*.bak
