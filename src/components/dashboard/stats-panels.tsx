@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/chart'
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatDay } from '@/lib/dashboard-format'
+import { formatDay, type Range, rangeCopy } from '@/lib/dashboard-format'
 
 export type StatsSeriesPoint = {
   day: string
@@ -92,28 +92,29 @@ export function StatCard({
 }
 
 export function NotificationActivityPanel({
-  days,
+  range,
   windowPublished,
   series,
   className,
 }: {
-  days: number
+  range: Range
   windowPublished: number
   series: StatsSeriesPoint[]
   className?: string
 }) {
+  const copy = rangeCopy(range)
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle>Notification activity</CardTitle>
-        <CardDescription>Published and dead-lettered per day, last {days} days</CardDescription>
+        <CardDescription>Published and dead-lettered per day, {copy.period}</CardDescription>
       </CardHeader>
       <CardContent>
         {windowPublished === 0 ? (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No notifications in this period</EmptyTitle>
-              <EmptyDescription>Nothing was published in the last {days} days.</EmptyDescription>
+              <EmptyDescription>Nothing was published {copy.within}.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
@@ -206,24 +207,25 @@ export function DeliveryStatusPie({
 }
 
 export function ChannelActivityPanel({
-  days,
+  range,
   byChannel,
 }: {
-  days: number
+  range: Range
   byChannel: { channel: string; delivered: number; deadLetter: number }[]
 }) {
+  const copy = rangeCopy(range)
   return (
     <Card>
       <CardHeader>
         <CardTitle>Channels</CardTitle>
-        <CardDescription>Finished deliveries per channel, last {days} days</CardDescription>
+        <CardDescription>Finished deliveries per channel, {copy.period}</CardDescription>
       </CardHeader>
       <CardContent>
         {byChannel.every((row) => row.delivered + row.deadLetter === 0) ? (
           <Empty>
             <EmptyHeader>
               <EmptyTitle>No channel activity</EmptyTitle>
-              <EmptyDescription>No deliveries finished in the last {days} days.</EmptyDescription>
+              <EmptyDescription>No deliveries finished {copy.within}.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (

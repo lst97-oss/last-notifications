@@ -63,8 +63,8 @@ function FleetOverviewPage() {
       {stats.data && (stats.data.totals.published > 0 || stats.data.topApps.length > 0) ? (
         <DashboardStatsBody
           stats={stats.data}
-          days={Number(days)}
-          breakdown={<TopAppsCard days={Number(days)} topApps={stats.data.topApps} />}
+          range={days}
+          breakdown={<TopAppsCard range={days} topApps={stats.data.topApps} />}
         />
       ) : null}
     </DashboardPage>

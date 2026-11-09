@@ -68,6 +68,11 @@ export const deliveriesQuerySchema = z.strictObject({
   offset: z.coerce.number().int().min(0).default(0),
 })
 
+const STATS_RANGE = { '7': 7, '30': 30, '90': 90, all: 'all' } as const
+
 export const statsQuerySchema = z.strictObject({
-  days: z.enum(['7', '30', '90']).default('30'),
+  days: z
+    .enum(['7', '30', '90', 'all'])
+    .default('30')
+    .transform((days) => STATS_RANGE[days]),
 })

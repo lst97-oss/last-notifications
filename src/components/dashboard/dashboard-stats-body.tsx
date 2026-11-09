@@ -12,6 +12,7 @@ import {
 } from '@/components/dashboard/stats-panels'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
+import { type Range, rangeCopy } from '@/lib/dashboard-format'
 
 // Wire mirror of AppDashboardStats; dates already cross the wire as strings.
 export type DashboardStats = {
@@ -36,11 +37,11 @@ export type DashboardStats = {
 // leaderboards — everything below is already scoped by whichever endpoint fed it.
 export function DashboardStatsBody({
   stats,
-  days,
+  range,
   breakdown,
 }: {
   stats: DashboardStats
-  days: number
+  range: Range
   // The third cell between Channels and Read rate: a fleet fills it with Top
   // apps, one app with its own type/recipient leaderboards.
   breakdown?: React.ReactNode
@@ -55,7 +56,7 @@ export function DashboardStatsBody({
           title="Notifications published"
           description="Every notification in scope"
           value={totals.published.toLocaleString()}
-          footnote={`+${windowStats.published.toLocaleString()} in the last ${days} days`}
+          footnote={`+${windowStats.published.toLocaleString()} ${rangeCopy(range).within}`}
         />
         <StatCard
           title="Deliveries finished"
@@ -80,7 +81,7 @@ export function DashboardStatsBody({
       <section aria-label="Trends" className="grid gap-4 lg:grid-cols-3">
         <NotificationActivityPanel
           className="lg:col-span-2"
-          days={days}
+          range={range}
           windowPublished={windowStats.published}
           series={stats.series}
         />
@@ -92,7 +93,7 @@ export function DashboardStatsBody({
       </section>
 
       <section aria-label="Breakdown" className="grid gap-4 lg:grid-cols-3">
-        <ChannelActivityPanel days={days} byChannel={stats.byChannel} />
+        <ChannelActivityPanel range={range} byChannel={stats.byChannel} />
         {breakdown}
         <ReadRatePanel totals={totals} />
       </section>
@@ -103,17 +104,17 @@ export function DashboardStatsBody({
 // Fleet-only card: the busiest apps in the window, each linking to its detail
 // page so the overview stays a launchpad instead of a dead end.
 export function TopAppsCard({
-  days,
+  range,
   topApps,
 }: {
-  days: number
+  range: Range
   topApps: { appKey: string; appName: string; total: number }[]
 }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Top apps</CardTitle>
-        <CardDescription>Most notifications, last {days} days</CardDescription>
+        <CardDescription>Most notifications, {rangeCopy(range).period}</CardDescription>
       </CardHeader>
       <CardContent>
         <Leaderboard
@@ -128,7 +129,7 @@ export function TopAppsCard({
             <Empty>
               <EmptyHeader>
                 <EmptyTitle>No apps published anything</EmptyTitle>
-                <EmptyDescription>Apps with notifications in the last {days} days show up here.</EmptyDescription>
+                <EmptyDescription>Apps with notifications {rangeCopy(range).within} show up here.</EmptyDescription>
               </EmptyHeader>
             </Empty>
           }

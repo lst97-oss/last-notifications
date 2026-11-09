@@ -717,6 +717,19 @@ describe('dashboard stats', () => {
     expect(stats.topRecipients.reduce((sum, row) => sum + row.total, 0)).toBe(2)
   })
 
+  test('the all range starts at the first notification and counts every row', async () => {
+    // Both notifications were published today, so the spine is today alone.
+    const stats = await getAppStats(statsApp.id, 'all')
+    expect(stats.totals).toMatchObject({ published: 2, read: 1 })
+    expect(stats.series).toHaveLength(1)
+    expect(stats.window).toMatchObject({ days: 1, published: 2 })
+    expect(stats.topTypes.reduce((sum, row) => sum + row.total, 0)).toBe(2)
+
+    const fleet = await getFleetStats([statsApp.id], 'all')
+    expect(fleet.window).toMatchObject({ days: 1, published: 2 })
+    expect((await getFleetStats([], 'all')).series).toHaveLength(1)
+  })
+
   test('fleet stats scope to the given apps and zero out an empty scope', async () => {
     const fleet = await getFleetStats([statsApp.id], 7)
     expect(fleet.totals.published).toBe(2)

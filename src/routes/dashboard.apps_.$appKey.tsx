@@ -27,7 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/components/ui/toast'
 import { describeApiError, readApiData } from '@/lib/api-response'
-import { formatDay, type Range } from '@/lib/dashboard-format'
+import { formatDay, type Range, rangeCopy } from '@/lib/dashboard-format'
 
 type AppDetail = {
   app: { id: string; key: string; name: string; origin: string | null; createdAt: string }
@@ -103,8 +103,8 @@ function AppDetailPage() {
       {detail.data ? (
         <DashboardStatsBody
           stats={detail.data.stats}
-          days={Number(days)}
-          breakdown={<TopMoversCard detail={detail.data} days={Number(days)} />}
+          range={days}
+          breakdown={<TopMoversCard detail={detail.data} range={days} />}
         />
       ) : null}
 
@@ -235,13 +235,13 @@ function AppSettingsCard({ appKey, app }: { appKey: string; app: AppDetail['app'
 
 // The per-app replacement for the fleet's Top apps card: what this app sends,
 // and to whom.
-function TopMoversCard({ detail, days }: { detail: AppDetail; days: number }) {
+function TopMoversCard({ detail, range }: { detail: AppDetail; range: Range }) {
   const { topTypes, topRecipients } = detail.stats
   return (
     <Card>
       <CardHeader>
         <CardTitle>Top senders</CardTitle>
-        <CardDescription>Busiest types and recipients, last {days} days</CardDescription>
+        <CardDescription>Busiest types and recipients, {rangeCopy(range).period}</CardDescription>
         <CardAction>
           <Button variant="outline" size="sm" render={<Link to="/dashboard/deliveries" />}>
             Inspect

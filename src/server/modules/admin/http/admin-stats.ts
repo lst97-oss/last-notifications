@@ -33,11 +33,11 @@ export async function getAppStatsData(request: Request, appKey: string): Promise
   if (allowed && !allowed.includes(appId)) {
     throw new HttpError(ErrorCode.FORBIDDEN, 'Only an admin of this app can view its stats')
   }
-  return ok({ detail: await getAppDetail(appId, Number(days) as 7 | 30 | 90) })
+  return ok({ detail: await getAppDetail(appId, days) })
 }
 
 export async function getFleetStatsData(request: Request): Promise<Response> {
   const userId = await requireDashboardUser(request, 'Sign in to view dashboard stats')
   const { days } = parseSearchParams(request.url, statsQuerySchema)
-  return ok({ stats: await getFleetStats(await visibleAppIds(userId), Number(days) as 7 | 30 | 90) })
+  return ok({ stats: await getFleetStats(await visibleAppIds(userId), days) })
 }

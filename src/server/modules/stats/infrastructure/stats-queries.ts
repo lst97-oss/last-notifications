@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, min, sql } from 'drizzle-orm'
 
 import { type BusinessDb, getBusinessDb } from '@/server/db/business-sql'
 import { appOrigins, apps, notificationDeliveries, notifications } from '@/server/db/schema'
@@ -43,11 +43,24 @@ export type AppDetail = {
   stats: AppDashboardStats
 }
 
+export type StatsRange = 7 | 30 | 90 | 'all'
+
 // UTC midnight of the first day in the window; the series spine uses the same
 // boundary so every aggregate lines up with the chart.
 function windowStart(days: number): Date {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - (days - 1)))
+}
+
+// `all` starts at the scope's first notification; with none, it is today alone.
+async function rangeStart(range: StatsRange, appFilter: ReturnType<typeof sql>, db: BusinessDb): Promise<Date> {
+  if (range !== 'all') return windowStart(range)
+  const [first] = await db
+    .select({ createdAt: min(notifications.createdAt) })
+    .from(notifications)
+    .where(appFilter)
+  const day = first?.createdAt ?? new Date()
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()))
 }
 
 // An app with nothing to aggregate still gets a full spine, so charts render
@@ -67,10 +80,10 @@ function zeroedSeries(days: number): StatsSeriesPoint[] {
   })
 }
 
-function summarise(days: number, series: StatsSeriesPoint[]): StatsWindow {
+function summarise(series: StatsSeriesPoint[]): StatsWindow {
   return {
-    days,
-    start: series[0]?.day ?? windowStart(days).toISOString().slice(0, 10),
+    days: series.length,
+    start: series[0]?.day ?? '',
     published: series.reduce((sum, row) => sum + row.published, 0),
     delivered: series.reduce((sum, row) => sum + row.delivered, 0),
     deadLetter: series.reduce((sum, row) => sum + row.deadLetter, 0),
@@ -222,17 +235,17 @@ async function readBreakdowns(
 
 export async function getAppStats(
   appId: string,
-  days: 7 | 30 | 90,
+  range: StatsRange,
   db: BusinessDb = getBusinessDb(),
 ): Promise<AppDashboardStats> {
   const appFilter = eq(notifications.appId, appId)
-  const start = windowStart(days)
+  const start = await rangeStart(range, appFilter, db)
   const [scope, series, breakdowns] = await Promise.all([
     readTotals(appFilter, db),
     readSeries(appFilter, start, db),
     readBreakdowns(appFilter, start, db),
   ])
-  return { ...scope, ...breakdowns, window: summarise(days, series), series }
+  return { ...scope, ...breakdowns, window: summarise(series), series }
 }
 
 // `null` means the viewer administers every app (instance admin). An empty list
@@ -240,14 +253,15 @@ export async function getAppStats(
 // counts for someone who can see nothing.
 export async function getFleetStats(
   appIds: string[] | null,
-  days: 7 | 30 | 90,
+  range: StatsRange,
   db: BusinessDb = getBusinessDb(),
 ): Promise<FleetDashboardStats> {
   if (appIds !== null && appIds.length === 0) {
+    const series = zeroedSeries(range === 'all' ? 1 : range)
     return {
       totals: { published: 0, read: 0, recipients: 0, delivered: 0, deadLetter: 0, pending: 0, processing: 0 },
-      window: summarise(days, zeroedSeries(days)),
-      series: zeroedSeries(days),
+      window: summarise(series),
+      series,
       byChannel: [],
       topTypes: [],
       topRecipients: [],
@@ -256,7 +270,7 @@ export async function getFleetStats(
   }
 
   const appFilter = appIds === null ? sql`true` : inArray(notifications.appId, appIds)
-  const start = windowStart(days)
+  const start = await rangeStart(range, appFilter, db)
   const [scope, series, breakdowns, topApps] = await Promise.all([
     readTotals(appFilter, db),
     readSeries(appFilter, start, db),
@@ -274,7 +288,7 @@ export async function getFleetStats(
     ...scope,
     ...breakdowns,
     topApps: topApps.map((row) => ({ appKey: row.appKey, appName: row.appName, total: Number(row.total) })),
-    window: summarise(days, series),
+    window: summarise(series),
     series,
   }
 }
@@ -283,7 +297,7 @@ export async function getFleetStats(
 // here rather than an empty payload, so the page cannot render a phantom tenant.
 export async function getAppDetail(
   appId: string,
-  days: 7 | 30 | 90,
+  range: StatsRange,
   db: BusinessDb = getBusinessDb(),
 ): Promise<AppDetail> {
   const [row] = await db
@@ -308,6 +322,6 @@ export async function getAppDetail(
       origin: origin?.origin ?? null,
       createdAt: row.createdAt.toISOString(),
     },
-    stats: await getAppStats(appId, days, db),
+    stats: await getAppStats(appId, range, db),
   }
 }
