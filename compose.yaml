@@ -28,6 +28,8 @@ x-app-environment: &app-environment
   SMTP_PASS: ${SMTP_PASS:-}
   SECRET_ENCRYPTION_KEY: ${SECRET_ENCRYPTION_KEY:-}
   WS_PORT: ${WS_PORT:-3001}
+  # Seconds the app waits for in-flight requests before a forced close. Keep the app's stop_grace_period above it.
+  SERVER_SHUTDOWN_TIMEOUT: ${SERVER_SHUTDOWN_TIMEOUT:-10}
 
 x-app-service: &app-service
   image: ${LAST_NOTIFICATIONS_IMAGE:-last-notifications:local}
@@ -76,6 +78,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    stop_grace_period: 20s
     restart: unless-stopped
 
   worker:
@@ -86,6 +89,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # One send can run up to 30s (HANDLER_TIMEOUT_MS). Unsent claims are handed back, not waited on.
+    stop_grace_period: 40s
     restart: unless-stopped
 
   # WebSocket gateway. The app process cannot hold a WS upgrade (TanStack Start
@@ -101,6 +106,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    stop_grace_period: 15s
     restart: unless-stopped
 
 volumes:

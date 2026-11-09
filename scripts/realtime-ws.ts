@@ -8,7 +8,7 @@ import { encodeCursor } from '@/server/modules/notifications/domain/notification
 import { toInboxItem } from '@/server/modules/notifications/http/inbox-item'
 import { listInboxItems } from '@/server/modules/notifications/infrastructure/notification-repository'
 import { verifyRecipientToken } from '@/server/modules/notifications/infrastructure/recipient-token-repository'
-import { startStreamBus } from '@/server/modules/notifications/infrastructure/stream-bus'
+import { startStreamBus, stopStreamBus } from '@/server/modules/notifications/infrastructure/stream-bus'
 import { subscribeToRecipient } from '@/server/modules/notifications/infrastructure/stream-hub'
 import { getRequestLogger } from '@/server/observability/logger'
 
@@ -25,6 +25,9 @@ import { getRequestLogger } from '@/server/observability/logger'
 //   close    4401 invalid/expired token, 4403 wrong app or origin, 1011 internal
 export const WS_HEARTBEAT_MS = 30_000
 const FAILED_PINGS_BEFORE_CLOSE = 2
+// Stays under compose's stop_grace_period, so a client that never answers the close frame cannot
+// keep the process alive until the platform SIGKILLs it.
+const SHUTDOWN_DEADLINE_MS = 10_000
 
 type WsData = {
   appId: string
@@ -163,13 +166,34 @@ export function startRealtimeServer(port: number) {
     }
   }, WS_HEARTBEAT_MS)
 
-  const shutdown = () => {
+  // Close sockets with 1001, let in-flight work finish (server.stop() waits for it), then release the
+  // LISTEN connection and the DB before exiting.
+  let stopping = false
+  const shutdown = async (signal: string) => {
+    if (stopping) return
+    stopping = true
+    const startedAt = performance.now()
+    logger.info('shutdown.signal', { signal, sockets: sockets.size })
     clearInterval(heartbeat)
+    setTimeout(() => {
+      logger.error('shutdown.deadline_exceeded', { sockets: sockets.size })
+      process.exit(1)
+    }, SHUTDOWN_DEADLINE_MS)
     for (const ws of sockets) ws.close(1001, 'server shutting down')
-    void server.stop(true)
+    try {
+      await server.stop()
+      await stopStreamBus()
+      await closeBusinessSql()
+      logger.info('shutdown.drained', { durationMs: Math.round(performance.now() - startedAt) })
+      logger.info('shutdown.exit', { code: 0 })
+      process.exit(0)
+    } catch (error) {
+      logger.error('ws.shutdown_failed', { detail: describe(error) })
+      process.exit(1)
+    }
   }
-  process.on('SIGINT', shutdown)
-  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', () => void shutdown('SIGINT'))
+  process.on('SIGTERM', () => void shutdown('SIGTERM'))
 
   return server
 }
@@ -210,6 +234,3 @@ if (!listening) {
 
 startRealtimeServer(port)
 logger.info('ws.listening', { port })
-
-process.on('SIGINT', () => void closeBusinessSql())
-process.on('SIGTERM', () => void closeBusinessSql())

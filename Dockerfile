@@ -51,6 +51,8 @@ USER bun
 
 EXPOSE 3000
 
+STOPSIGNAL SIGTERM
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD bun -e "const r = await fetch('http://127.0.0.1:' + Bun.env.PORT + '/api/live'); process.exit(r.ok ? 0 : 1)"
 

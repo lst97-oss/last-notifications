@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, notExists, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, lte, notExists, sql } from 'drizzle-orm'
 import { type BusinessDb, getBusinessDb } from '@/server/db/business-sql'
 import { apps, notificationDeliveries, notifications } from '@/server/db/schema'
 import type { NotificationChannelKind } from '@/server/db/vocabularies'
@@ -13,10 +13,12 @@ import { purgeFailedPushSubscriptions } from '@/server/plugins/webpush/webpush.p
 import { withTimeout } from '@/server/plugins/with-timeout'
 import { openSecret, SecretBoxError } from '@/server/security/secret-box'
 
-const MAX_ATTEMPTS = 8
-const DELIVERY_LEASE_MS = 60_000
-const HANDLER_TIMEOUT_MS = 30_000
+export const MAX_ATTEMPTS = 8
+export const HANDLER_TIMEOUT_MS = 30_000
 export const BATCH_SIZE = 20
+// A claim must outlive a full batch of sends, which run one after another. A shorter lease lets a second
+// worker claim rows this worker is still sending, so they go out twice.
+export const DELIVERY_LEASE_MS = BATCH_SIZE * HANDLER_TIMEOUT_MS + 60_000
 // Delivered notifications stay this long for audit, then go with their deliveries.
 const EVENT_RETENTION_MS = 30 * 86_400_000
 
@@ -57,6 +59,7 @@ export async function deliverPendingChannelDeliveries(
   db: BusinessDb = getBusinessDb(),
   now: Date = new Date(),
   channels: readonly NotificationChannel[] = getNotificationChannels(),
+  stop?: AbortSignal,
 ): Promise<number> {
   const claimed = await db
     .update(notificationDeliveries)
@@ -114,7 +117,22 @@ export async function deliverPendingChannelDeliveries(
   }
 
   let processed = 0
-  for (const delivery of claimed) {
+  for (const [index, delivery] of claimed.entries()) {
+    if (stop?.aborted) {
+      // Shutdown: hand the unsent rest of the claim back now, not after the lease runs out. The claim
+      // counted as an attempt that never ran, so undo that too.
+      await db
+        .update(notificationDeliveries)
+        .set({ status: 'pending', nextAttemptAt: now, attempts: sql`${notificationDeliveries.attempts} - 1` })
+        .where(
+          inArray(
+            notificationDeliveries.id,
+            claimed.slice(index).map((row) => row.id),
+          ),
+        )
+      logger.info('shutdown.handed_back', { count: claimed.length - index })
+      break
+    }
     const target = byId.get(delivery.notificationId)
     if (!target) continue
     processed += 1
@@ -165,6 +183,16 @@ export async function deliverPendingChannelDeliveries(
     }
   }
   return processed
+}
+
+// Rows the worker still owes or has parked, per channel and status, for the worker's status line.
+// shortcut: unindexed count over notification_deliveries on each status line, fine while the table is small; add a partial index on status when it grows.
+export function countDeliveryQueue(db: BusinessDb = getBusinessDb()) {
+  return db
+    .select({ channel: notificationDeliveries.channel, status: notificationDeliveries.status, count: count() })
+    .from(notificationDeliveries)
+    .where(inArray(notificationDeliveries.status, ['pending', 'processing', 'dead_letter']))
+    .groupBy(notificationDeliveries.channel, notificationDeliveries.status)
 }
 
 // Removes email-only notifications whose every delivery finished, once they are older than

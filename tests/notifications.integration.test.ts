@@ -507,6 +507,40 @@ describe('channel delivery worker', () => {
     expect(delivery?.lastError).toBe('NO_RECIPIENT_ADDRESS')
   })
 
+  test('a stop signal hands the unsent claim back at once, attempt undone', async () => {
+    const published = await publishNotification({
+      app: app(),
+      recipientKey: 'user-stopping',
+      type: 't',
+      title: 'Hand back',
+      body: '',
+      data: {},
+      priority: 0,
+      channels: ['email'],
+    })
+    const stopping = new AbortController()
+    stopping.abort()
+    let sends = 0
+    await deliverPendingChannelDeliveries(
+      getBusinessDb(),
+      new Date(),
+      [
+        stub(async () => {
+          sends += 1
+        }),
+      ],
+      stopping.signal,
+    )
+    expect(sends).toBe(0)
+    const [delivery] = await getBusinessDb()
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.notificationId, published.id))
+    expect(delivery?.status).toBe('pending')
+    expect(delivery?.attempts).toBe(0)
+    expect(delivery?.nextAttemptAt.getTime()).toBeLessThanOrEqual(Date.now())
+  })
+
   test('dead-letters immediately when no plugin owns the channel', async () => {
     const published = await publishNotification({
       app: app(),
