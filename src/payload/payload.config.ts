@@ -6,6 +6,8 @@ import { Users } from '@/payload/collections/users'
 import { migrations } from '@/payload/migrations'
 import { resolvePayloadServerUrl } from '@/payload/security/payload-server-url'
 import { getServerEnv } from '@/server/env'
+import { payloadLoggerConfig } from '@/server/observability/payload-logger'
+import { sanitizeLogFields } from '@/server/observability/redact'
 
 const env = getServerEnv()
 // import.meta.dir is Bun-only; the Payload CLI (generate:types,
@@ -14,6 +16,8 @@ const payloadDirectory = import.meta.dir ?? import.meta.dirname
 const payloadPath = (relativePath: string) => `${payloadDirectory}/${relativePath.replace(/^\.\//, '')}`
 
 export default buildConfig({
+  // Payload's lines go through our writer and redaction, so they match the server's format (see payload-logger.ts).
+  logger: payloadLoggerConfig(sanitizeLogFields),
   graphQL: {
     disable: true,
   },
