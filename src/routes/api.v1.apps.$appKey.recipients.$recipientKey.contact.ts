@@ -7,8 +7,8 @@ import { clearContactData } from '@/server/modules/notifications/http/recipient-
 
 const METHODS = 'PUT, OPTIONS'
 
-// The address a channel can reach this recipient at. The recipient may set its
-// own (recipient token); an app key needs recipients:update.
+// The address a channel can reach this recipient at. Only an app key with
+// recipients:update may set it; a recipient token cannot.
 export const Route = createFileRoute('/api/v1/apps/$appKey/recipients/$recipientKey/contact')({
   server: {
     handlers: {

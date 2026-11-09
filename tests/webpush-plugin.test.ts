@@ -54,7 +54,7 @@ const config = {
 describe('webpush channel', () => {
   test('marks an endpoint failed on 410 and reports the failure', async () => {
     const { db } = fakeDb([
-      { id: 'sub-1', endpoint: 'https://push.example/1', p256dh: 'k', auth: 'a', failureCount: 0 },
+      { id: 'sub-1', endpoint: 'https://fcm.googleapis.com/1', p256dh: 'k', auth: 'a', failureCount: 0 },
     ])
     const channel = createWebpushChannel({
       db,
@@ -76,8 +76,8 @@ describe('webpush channel', () => {
 
   test('succeeds when one of several endpoints accepts', async () => {
     const { db } = fakeDb([
-      { id: 'sub-1', endpoint: 'https://push.example/1', p256dh: 'k', auth: 'a', failureCount: 0 },
-      { id: 'sub-2', endpoint: 'https://push.example/2', p256dh: 'k', auth: 'a', failureCount: 0 },
+      { id: 'sub-1', endpoint: 'https://fcm.googleapis.com/1', p256dh: 'k', auth: 'a', failureCount: 0 },
+      { id: 'sub-2', endpoint: 'https://fcm.googleapis.com/2', p256dh: 'k', auth: 'a', failureCount: 0 },
     ])
     let calls = 0
     const channel = createWebpushChannel({
@@ -101,7 +101,7 @@ describe('webpush channel', () => {
 
   test('sends the style keys in the payload', async () => {
     const { db } = fakeDb([
-      { id: 'sub-1', endpoint: 'https://push.example/1', p256dh: 'k', auth: 'a', failureCount: 0 },
+      { id: 'sub-1', endpoint: 'https://fcm.googleapis.com/1', p256dh: 'k', auth: 'a', failureCount: 0 },
     ])
     let payload = ''
     const channel = createWebpushChannel({
@@ -147,9 +147,9 @@ describe('webpush channel', () => {
 
 describe('webpush send limits', () => {
   const twoEndpoints = fakeDb([
-    { id: 'sub-1', endpoint: 'https://push.example/1', p256dh: 'k', auth: 'a', failureCount: 0 },
-    { id: 'sub-2', endpoint: 'https://push.example/2', p256dh: 'k', auth: 'a', failureCount: 0 },
-    { id: 'sub-3', endpoint: 'https://push.example/3', p256dh: 'k', auth: 'a', failureCount: 0 },
+    { id: 'sub-1', endpoint: 'https://fcm.googleapis.com/1', p256dh: 'k', auth: 'a', failureCount: 0 },
+    { id: 'sub-2', endpoint: 'https://fcm.googleapis.com/2', p256dh: 'k', auth: 'a', failureCount: 0 },
+    { id: 'sub-3', endpoint: 'https://fcm.googleapis.com/3', p256dh: 'k', auth: 'a', failureCount: 0 },
   ]).db
 
   const sendWith = (channel: ReturnType<typeof createWebpushChannel>, signal: AbortSignal) =>
@@ -175,6 +175,24 @@ describe('webpush send limits', () => {
     })
     await sendWith(channel, controller.signal)
     expect(calls).toBe(1)
+  })
+
+  test('never calls an endpoint outside the browser push services', async () => {
+    const { db } = fakeDb([
+      { id: 'sub-1', endpoint: 'https://10.0.0.5:8443/push', p256dh: 'k', auth: 'a', failureCount: 0 },
+      { id: 'sub-2', endpoint: 'https://fcm.googleapis.com/fcm/send/ok', p256dh: 'k', auth: 'a', failureCount: 0 },
+    ])
+    const called: string[] = []
+    const channel = createWebpushChannel({
+      db,
+      config,
+      send: async (subscription) => {
+        called.push(subscription.endpoint)
+        return { statusCode: 201 }
+      },
+    })
+    await sendWith(channel, new AbortController().signal)
+    expect(called).toEqual(['https://fcm.googleapis.com/fcm/send/ok'])
   })
 
   test('bounds each push call with its own request timeout', async () => {

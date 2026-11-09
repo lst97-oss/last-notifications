@@ -5,6 +5,7 @@ import webpush from 'web-push'
 import type { ChannelFact } from '@/lib/channel-facts'
 import { type BusinessDb, getBusinessDb } from '@/server/db/business-sql'
 import { pushSubscriptions } from '@/server/db/schema'
+import { isPushServiceEndpoint } from '@/server/modules/notifications/domain/push-endpoint'
 import { ChannelError, type NotificationChannel } from '@/server/plugins/notification-channels'
 import { getWebpushConfig, PUSH_EXPIRY_DAYS, type WebpushConfig } from '@/server/plugins/webpush/webpush.config'
 import { parseWebpushStyle } from '@/server/plugins/webpush/webpush.style'
@@ -70,7 +71,7 @@ export function createWebpushChannel(deps: WebpushDeps = {}): NotificationChanne
 
       const db = deps.db ?? getBusinessDb()
       const now = deps.now?.() ?? new Date()
-      const subscriptions = await db
+      const stored = await db
         .select({
           id: pushSubscriptions.id,
           endpoint: pushSubscriptions.endpoint,
@@ -86,6 +87,8 @@ export function createWebpushChannel(deps: WebpushDeps = {}): NotificationChanne
             isNull(pushSubscriptions.failedAt),
           ),
         )
+      // Rows saved before the endpoint check are skipped, so only browser push services are ever called.
+      const subscriptions = stored.filter((subscription) => isPushServiceEndpoint(subscription.endpoint))
       // Retrying cannot add a subscription, so this dead-letters at once instead of spending eight attempts.
       if (subscriptions.length === 0) throw new ChannelError('NO_PUSH_SUBSCRIPTION', undefined, { retryable: false })
 

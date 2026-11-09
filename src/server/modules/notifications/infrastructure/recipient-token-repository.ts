@@ -5,8 +5,9 @@ import { recipientTokens } from '@/server/db/schema'
 import { RECIPIENT_TOKEN_TTL_MS } from '@/server/modules/notifications/domain/notification'
 import { ensureRecipient } from '@/server/modules/notifications/infrastructure/notification-repository'
 
-// Short-lived read-only browser credential. Only the sha256 hash is stored, so a
-// database leak cannot be replayed as a live token.
+// Short-lived browser credential for one recipient: it reads that recipient's inbox, changes its read and archive
+// state, its preferences and its push subscriptions. It cannot change a contact address. Only the sha256 hash is
+// stored, so a database leak cannot be replayed as a live token.
 export type MintedRecipientToken = { token: string; expiresAt: Date }
 
 function hashToken(token: string): string {

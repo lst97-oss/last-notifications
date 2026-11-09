@@ -335,7 +335,7 @@ route({
   tags: ['recipients'],
   summary: 'Set a contact address',
   description:
-    'A recipient token may set its own email. A webhook URL needs an app key with `channels:update`, because the stored URL decides where the server posts. The URL must be `https` and public.',
+    'Only an app key with `recipients:update` may set a contact address; a recipient token cannot. A webhook URL must be `https` and public, because the stored URL decides where the server posts.',
   security: consumerAuth,
   params: recipientParams,
   body: contactBodySchema,

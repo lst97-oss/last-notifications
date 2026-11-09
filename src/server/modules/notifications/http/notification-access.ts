@@ -1,4 +1,5 @@
 import type { ApiKeyScope } from '@/lib/api-key-scopes'
+import { prefixedBearer } from '@/server/http/credentials'
 import { ErrorCode, HttpError } from '@/server/http/errors'
 import { requireServiceKey } from '@/server/modules/api-keys/infrastructure/api-key-repository'
 import { type AppRecord, getAppByKey } from '@/server/modules/apps/infrastructure/app-repository'
@@ -12,14 +13,11 @@ export async function requireApp(appKey: string): Promise<AppRecord> {
   return app
 }
 
-// Read-only browser credential supplied by the recipient's page. EventSource and
+// Browser credential for one recipient, supplied by the recipient's page. EventSource and
 // WebSocket cannot set headers, so the `?token=` query form is accepted too.
 export function extractRecipientToken(request: Request): string | null {
-  const header = request.headers.get('authorization')?.trim()
-  if (header) {
-    const secret = /^bearer\s+/i.test(header) ? header.replace(/^bearer\s+/i, '').trim() : header
-    if (secret.startsWith('lrt_')) return secret
-  }
+  const header = prefixedBearer(request.headers.get('authorization'), 'lrt_')
+  if (header) return header
   const query = new URL(request.url).searchParams.get('token')?.trim()
   return query?.startsWith('lrt_') ? query : null
 }
@@ -67,9 +65,8 @@ export async function requireInboxRecipient(
   return pinRecipient(await authenticateInbox(request, app, options.scope), options.recipientKey)
 }
 
-// Contact and preference writes: the recipient may change its own (its token), and an app key
-// with recipients:update may change any recipient of its app. Returns which one acted, so a
-// caller can refuse the token after the body is read.
+// Preference writes: the recipient may change its own (its token), and an app key with
+// recipients:update may change any recipient of its app. Returns which one acted.
 export async function requireRecipientWriter(
   request: Request,
   app: AppRecord,

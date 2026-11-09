@@ -5,11 +5,13 @@ import { parseJsonBody, parseSearchParams, parseWith } from '@/server/http/valid
 import { requireServiceKey } from '@/server/modules/api-keys/infrastructure/api-key-repository'
 import { publishNotification } from '@/server/modules/notifications/application/publish-notification'
 import { encodeCursor } from '@/server/modules/notifications/domain/notification'
+import { isPushServiceEndpoint } from '@/server/modules/notifications/domain/push-endpoint'
 import { verifyUnsubscribeToken } from '@/server/modules/notifications/domain/unsubscribe-token'
 import { webhookUrlProblem } from '@/server/modules/notifications/domain/webhook-url'
 import { toInboxItem } from '@/server/modules/notifications/http/inbox-item'
 import {
   authenticateInbox,
+  extractRecipientToken,
   pinRecipient,
   requireApp,
   requireInboxRecipient,
@@ -173,12 +175,13 @@ export async function setContactData(
 ): Promise<Response> {
   const app = await requireApp(parseWith(appKeyParamSchema, params.appKey))
   const recipientKey = parseWith(recipientKeyParamSchema, params.recipientKey)
-  const writer = await requireRecipientWriter(request, app, recipientKey)
-  const body = await parseJsonBody(request, contactBodySchema)
-  // A stored webhook URL decides where the server POSTs, so only the publisher (an app key) may set one.
-  if (writer === 'token' && body.channel === 'webhook') {
-    throw new HttpError(ErrorCode.FORBIDDEN, 'Only the app key can set a webhook address')
+  // A contact address decides where mail or webhooks go, so only the publisher (an app key) may set one.
+  // A browser token that could set it could redirect a recipient's mail for good, long after the token expires.
+  if (extractRecipientToken(request)) {
+    throw new HttpError(ErrorCode.FORBIDDEN, 'A recipient token cannot change a contact address')
   }
+  await requireServiceKey(request, 'recipients:update', app.key)
+  const body = await parseJsonBody(request, contactBodySchema)
   if (body.channel === 'webhook') {
     const problem = webhookUrlProblem(body.address, {
       allowPrivate: getWebhookPluginSettings().allowPrivateNetworks,
@@ -205,6 +208,10 @@ export async function subscribePushData(request: Request, params: { appKey: stri
   const app = await requireApp(parseWith(appKeyParamSchema, params.appKey))
   const auth = await authenticateInbox(request, app, 'recipients:update')
   const body = await parseJsonBody(request, pushSubscriptionBodySchema)
+  // The worker calls this endpoint, so only a browser push service may be named.
+  if (!isPushServiceEndpoint(body.endpoint)) {
+    throw new HttpError(ErrorCode.VALIDATION_ERROR, 'endpoint: must be an https address of a browser push service')
+  }
   const caller = pinRecipient(auth, body.recipientKey)
   await upsertPushSubscription({
     appId: app.id,
