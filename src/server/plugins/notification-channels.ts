@@ -38,6 +38,9 @@ export type NotificationChannel = {
   id: string
   apiVersion: 1
   channel: NotificationChannelKind
+  // 'outbox' (default) is queued and sent by the worker. 'inline' is sent by the publish call right
+  // after the row commits, for a channel that must not wait for the worker (in-app's live stream).
+  delivery?: 'outbox' | 'inline'
   migrations?: { folder: string; schema: string }
   describe: () => ChannelStatus
   send: (input: ChannelSendInput) => Promise<void>

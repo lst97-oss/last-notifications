@@ -142,6 +142,36 @@ describe('publishNotification', () => {
       .where(eq(notificationDeliveries.notificationId, published.id))
     expect(deliveries).toHaveLength(0)
   })
+
+  test('an inline channel is sent after commit, and its failure never fails the publish', async () => {
+    const sent: string[] = []
+    const inline: NotificationChannel = {
+      id: 'inapp',
+      apiVersion: 1,
+      channel: 'inapp',
+      delivery: 'inline',
+      describe: () => ({ id: 'inapp', apiVersion: 1, enabled: true, detail: '', facts: [], channels: ['inapp'] }),
+      send: async ({ notification }) => {
+        sent.push(notification.id)
+        throw new Error('stream down')
+      },
+    }
+    const published = await publishNotification(
+      {
+        app: app(),
+        recipientKey: 'user-inline',
+        type: 't',
+        title: 'Inline',
+        body: '',
+        data: {},
+        priority: 0,
+        channels: ['inapp'],
+      },
+      { channels: [inline] },
+    )
+    expect(sent).toEqual([published.id])
+    expect((await countInbox({ appId, recipientKey: 'user-inline' })).unread).toBe(1)
+  })
 })
 
 describe('inbox', () => {

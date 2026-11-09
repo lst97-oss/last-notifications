@@ -44,11 +44,6 @@ export function resolveTargetChannels(input: {
   })
 }
 
-// Async channels need an outbox row; inapp is delivered by the inbox row itself.
-export function asyncDeliveryChannels(channels: readonly NotificationChannelKind[]): NotificationChannelKind[] {
-  return channels.filter((channel) => channel !== 'inapp')
-}
-
 // Opaque inbox cursor over (created_at, id) so keyset paging stays stable while
 // rows are inserted. Encoded as base64url JSON, never parsed by clients.
 export type InboxCursor = { t: string; i: string }

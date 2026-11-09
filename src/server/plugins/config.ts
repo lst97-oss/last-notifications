@@ -1,4 +1,5 @@
 import { emailChannel } from '@/server/plugins/email/email.plugin'
+import { inappChannel } from '@/server/plugins/inapp/inapp.plugin'
 import { type NotificationChannel, validateChannelManifest } from '@/server/plugins/notification-channels'
 import { webhookChannel } from '@/server/plugins/webhook/webhook.plugin'
 import { webpushChannel } from '@/server/plugins/webpush/webpush.plugin'
@@ -7,6 +8,7 @@ import { webpushChannel } from '@/server/plugins/webpush/webpush.plugin'
 // here plus its folder; removing it leaves its DB rows in place. Validation runs
 // once at load, so a broken manifest fails the process, not a request.
 export const installedNotificationChannels = validateChannelManifest([
+  inappChannel,
   webpushChannel,
   emailChannel,
   webhookChannel,
