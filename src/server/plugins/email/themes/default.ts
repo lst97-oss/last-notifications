@@ -1,19 +1,11 @@
 import type { EmailStyle } from '@/server/plugins/email/email.style'
+import { escapeHtml } from '@/server/security/escape-html'
 
 export type EmailContent = {
   appName: string
   title: string
   body: string
   actionUrl?: string
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 // Pure renderer: no I/O, no clock, so the output is testable in isolation. Table

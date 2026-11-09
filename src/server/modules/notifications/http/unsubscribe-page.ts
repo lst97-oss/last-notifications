@@ -1,15 +1,8 @@
+import { escapeHtml } from '@/server/security/escape-html'
+
 // Pages a person sees when they open an unsubscribe link in a browser. Values come from the link
 // and the app's name, so every one is escaped before it goes into the markup.
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'"
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
 
 function page(title: string, body: string): Response {
   const html = `<!doctype html>
