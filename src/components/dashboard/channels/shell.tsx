@@ -22,7 +22,12 @@ export type ChannelView = {
   facts: ChannelFact[]
 }
 
-const CHANNEL_LABELS: Record<string, string> = { email: 'Email', webpush: 'Web push', webhook: 'Webhook' }
+const CHANNEL_LABELS: Record<string, string> = {
+  inapp: 'In-app',
+  email: 'Email',
+  webpush: 'Web push',
+  webhook: 'Webhook',
+}
 
 export function channelLabel(channel: string): string {
   return CHANNEL_LABELS[channel] ?? channel.charAt(0).toUpperCase() + channel.slice(1)
