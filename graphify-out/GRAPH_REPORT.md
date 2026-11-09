@@ -1,7 +1,7 @@
-# Graph Report - last-notifications  (2026-11-04)
+# Graph Report - last-notifications  (2026-11-09)
 
 ## Corpus Check
-- 382 files · ~127,244 words
+- 382 files · ~127,715 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 15 file(s) not represented in the graph (top: (none) 6, .css 4, .example 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a2bc2aff`
+- Built from commit: `8157f6e0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -242,7 +242,7 @@ Nodes (35): apiErrorSchema, apiKeySchema, appChannelSchema, appChannelSettingSch
 
 ### Community 18 - "Package Build Dependencies"
 Cohesion: 0.06
-Nodes (44): devDependencies, @biomejs/biome@2.6.2, bun-types@^1.4.4, consola@3.4.2, drizzle-kit@0.31.11, nitro@^3.0.260903-beta, oxc-transform-react@0.152.0, @scalar/api-reference@^1.76.4 (+36 more)
+Nodes (44): devDependencies, @biomejs/biome@2.6.2, bun-types@^1.4.4, consola@3.4.2, drizzle-kit@0.31.11, nitro@^3.0.260903-beta, oxc-transform-react@0.152.0, @scalar/api-reference@^1.77.0 (+36 more)
 
 ### Community 19 - "Vite Build Plugins"
 Cohesion: 0.08
@@ -581,23 +581,23 @@ Cohesion: 0.67
 Nodes (4): page(), unsubscribeConfirmPage(), unsubscribedPage(), escapeHtml()
 
 ## Ambiguous Edges - Review These
+- `Pre-rename keys are not upgraded; reissue them` → `Migration 0007 adds app_channels.signing_secret_encrypted`  [AMBIGUOUS]
+  CHANGELOG.md · relation: conceptually_related_to
+- `Pre-rename keys are not upgraded; reissue them` → `notifications:write removed; subscribers renamed to recipients`  [AMBIGUOUS]
+  CHANGELOG.md · relation: conceptually_related_to
 - `Migration 0005 widens channel CHECK constraints` → `Channel names validated by zod and plugin registry, not CHECK constraints`  [AMBIGUOUS]
   CHANGELOG.md · relation: conceptually_related_to
-- `Migration 0007 adds app_channels.signing_secret_encrypted` → `Pre-rename keys are not upgraded; reissue them`  [AMBIGUOUS]
-  CHANGELOG.md · relation: conceptually_related_to
-- `PUT contact accepts channel webhook; doc says subscribers:write` → `notifications:write removed; subscribers renamed to recipients`  [AMBIGUOUS]
+- `notifications:write removed; subscribers renamed to recipients` → `PUT contact accepts channel webhook; doc says subscribers:write`  [AMBIGUOUS]
   CHANGELOG.md · relation: conceptually_related_to
 - `better-auth: lnk_ API keys, session cookie, instance_admins` → `claims there is no auth wrapper (withAuth 501 stub)`  [AMBIGUOUS]
   src/server/README.md · relation: conceptually_related_to
-- `Pre-rename keys are not upgraded; reissue them` → `notifications:write removed; subscribers renamed to recipients`  [AMBIGUOUS]
+- `Business migrations rebuilt as one file per domain (0000 to 0004)` → `notifications.inapp column (migration 0004, default true)`  [AMBIGUOUS]
   CHANGELOG.md · relation: conceptually_related_to
 - `Auth API reference` → `Response envelope`  [AMBIGUOUS]
   content/docs/api-reference.mdx · relation: conceptually_related_to
-- `Business migrations rebuilt as one file per domain (0000 to 0004)` → `notifications.inapp column (migration 0004, default true)`  [AMBIGUOUS]
-  CHANGELOG.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **40 isolated node(s):** `RFC-8058`, `RFC-8058`, `RFC-8058`, `shared kernel auto-synced from the canonical template`, `DESIGN.md as the styling authority` (+35 more)
+- **40 isolated node(s):** `RFC-8058`, `RFC-8058`, `RFC-8058`, `shared kernel auto-synced from the canonical template`, `Release v0.4.0: Payload beta.2, kernel auto-sync, schema drift test` (+35 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 713 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **23 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -605,20 +605,20 @@ Nodes (4): page(), unsubscribeConfirmPage(), unsubscribedPage(), escapeHtml()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `@tanstack/react-router` connect `notification-handler.ts` to `@payloadcms/tanstack-start`, `dashboard.apps_.$appKey.tsx`, `Package Dependencies`, `payload.config.ts`, `dashboard.apps.tsx`, `admin-apps.ts`, `Deliveries Dashboard Page`, `HttpError`, `Docs Site Routing`, `Package Build Dependencies`, `health-handler.ts`, `api-key-repository.ts`, `API Keys Dashboard Page`, `Admin Sidebar UI`, `HttpError`, `Toast and Root Shell`, `dashboard-shell.tsx`, `Button`, `router.tsx`, `channel-config-handler.ts`, `business-auth.ts`, `notification-handler.ts`?**
-  _High betweenness centrality (0.128) - this node is a cross-community bridge._
+  _High betweenness centrality (0.133) - this node is a cross-community bridge._
 - **What connects `RFC-8058`, `RFC-8058`, `RFC-8058` to the rest of the system?**
   _40 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `stream-bus.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.09619450317124736 - nodes in this community are weakly interconnected._
 - **Why does `react` connect `cn` to `@base-ui/react`, `@payloadcms/tanstack-start`, `dashboard.apps_.$appKey.tsx`, `Package Dependencies`, `dashboard.apps.tsx`, `Deliveries Dashboard Page`, `Docs Site Routing`, `Package Build Dependencies`, `Dropdown and Menubar UI`, `Combobox and Input Groups`, `API Keys Dashboard Page`, `Admin Sidebar UI`, `Sidebar Components`, `Toast and Root Shell`, `Context Menu UI`, `Button`, `Syntax Highlighter`, `router.tsx`, `Drawer UI`, `Collapsible Trace UI`, `attachment.tsx`, `message.tsx`, `marker.tsx`, `class-variance-authority`, `sheet.tsx`, `shell.tsx`, `code-block.tsx`, `bubble.tsx`, `chart.tsx`?**
-  _High betweenness centrality (0.079) - this node is a cross-community bridge._
+  _High betweenness centrality (0.078) - this node is a cross-community bridge._
 - **Should `@base-ui/react` be split into smaller, more focused modules?**
   _Cohesion score 0.125 - nodes in this community are weakly interconnected._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
 
-- **What is the exact relationship between `Migration 0005 widens channel CHECK constraints` and `Channel names validated by zod and plugin registry, not CHECK constraints`?**
+- **What is the exact relationship between `Pre-rename keys are not upgraded; reissue them` and `Migration 0007 adds app_channels.signing_secret_encrypted`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **What is the exact relationship between `Migration 0007 adds app_channels.signing_secret_encrypted` and `Pre-rename keys are not upgraded; reissue them`?**
+- **What is the exact relationship between `Pre-rename keys are not upgraded; reissue them` and `notifications:write removed; subscribers renamed to recipients`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
