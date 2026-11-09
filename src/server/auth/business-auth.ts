@@ -1,14 +1,15 @@
 import { apiKey } from '@better-auth/api-key'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
+import { captcha } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 
-import { getBootstrapEmail, getBusinessAuthSettings } from '@/server/auth/business-auth-config'
+import { getBootstrapEmail, getBusinessAuthSettings, getTurnstileConfig } from '@/server/auth/business-auth-config'
 import type { SessionPrincipal } from '@/server/auth/principal'
 import { createRegisteredOrigins } from '@/server/auth/registered-origins'
 import { getBusinessDb } from '@/server/db/business-sql'
 import { account, apikey, session, user, verification } from '@/server/db/schema'
-import { hasInstanceAdmin } from '@/server/modules/admin/infrastructure/admin-repository'
+import { grantInstanceAdmin, hasInstanceAdmin } from '@/server/modules/admin/infrastructure/admin-repository'
 import { listAppOrigins } from '@/server/modules/apps/infrastructure/app-repository'
 import { getRequestLogger } from '@/server/observability/logger'
 import { installedOpenApiPlugins } from '@/server/openapi/config'
@@ -45,14 +46,25 @@ function businessApiKeyPlugin() {
   })
 }
 
-function createBusinessAuth(setup = false) {
+// Exported so a test can build an instance with Turnstile set; the app reads the singletons below.
+export function createBusinessAuth(setup = false) {
+  const turnstile = getTurnstileConfig()
   return betterAuth({
     ...getBusinessAuthSettings(undefined, setup),
     database: drizzleAdapter(getBusinessDb(), {
       provider: 'pg',
       schema: { user, session, account, verification, apikey },
     }),
-    plugins: [businessApiKeyPlugin(), tanstackStartCookies(), ...installedOpenApiPlugins],
+    // Better Auth takes the first valid IP in this order. The ingress must overwrite both headers, or a client can pick its own address (see self-hosting docs).
+    advanced: { ipAddress: { ipAddressHeaders: ['cf-connecting-ip', 'x-real-ip'] } },
+    plugins: [
+      businessApiKeyPlugin(),
+      ...(turnstile ? [captcha({ provider: 'cloudflare-turnstile', secretKey: turnstile.secretKey })] : []),
+      // Better Auth verifies the `x-captcha-response` header on sign-in and
+      // sign-up; the dashboard widget mints it.
+      tanstackStartCookies(),
+      ...installedOpenApiPlugins,
+    ],
     ...(setup
       ? {}
       : {
@@ -62,15 +74,19 @@ function createBusinessAuth(setup = false) {
           databaseHooks: {
             user: {
               create: {
-                // Closed by default: the first account arrives via the setup
-                // instance (POST /api/initial-admin). AUTH_BOOTSTRAP_EMAIL
-                // relaxes this for exactly one address so headless deploys can
-                // create their first admin without the setup form.
+                // Closed once an admin exists. Before that, the first account arrives via the setup form
+                // (POST /api/initial-admin). AUTH_BOOTSTRAP_EMAIL lets exactly one address in before an admin
+                // exists, so headless deploys can create their first admin without the form.
                 before: async (incoming) => {
-                  if (await hasInstanceAdmin()) return
+                  if (await hasInstanceAdmin()) return false
                   const bootstrapEmail = getBootstrapEmail()
                   if (bootstrapEmail && incoming?.email?.toLowerCase() === bootstrapEmail) return
                   return false
+                },
+                // The bootstrap account is the admin it was meant to be. Without this it would hold a user row
+                // with no admin row, and no path would grant one.
+                after: async (created) => {
+                  if (created.email.toLowerCase() === getBootstrapEmail()) await grantInstanceAdmin(created.id)
                 },
               },
             },

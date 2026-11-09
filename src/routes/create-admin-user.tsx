@@ -5,8 +5,9 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { adminFormSchema } from '@/lib/admin-schema'
 import { describeApiError, readApiData } from '@/lib/api-response'
 
 export const Route = createFileRoute('/create-admin-user')({
@@ -40,11 +41,14 @@ function CreateAdminPage() {
   })
 
   const form = useForm({
-    defaultValues: { name: '', email: '', password: '' },
+    defaultValues: { name: '', email: '', password: '', confirmPassword: '' },
+    // Validated on every change, so the retype check shows as soon as the two passwords differ.
+    validators: { onChange: adminFormSchema },
     onSubmit: async ({ value }) => {
+      // Only the account fields go to the server; the retyped password stays in the browser.
       // The mutation keeps the failure in `create.error`, which the page shows.
       try {
-        await create.mutateAsync(value)
+        await create.mutateAsync({ name: value.name, email: value.email, password: value.password })
       } catch {
         // Shown below from create.error.
       }
@@ -84,6 +88,7 @@ function CreateAdminPage() {
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
                     />
+                    {field.state.meta.isTouched && <FieldError errors={field.state.meta.errors} />}
                   </Field>
                 )}
               </form.Field>
@@ -99,6 +104,7 @@ function CreateAdminPage() {
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
                     />
+                    {field.state.meta.isTouched && <FieldError errors={field.state.meta.errors} />}
                   </Field>
                 )}
               </form.Field>
@@ -116,6 +122,25 @@ function CreateAdminPage() {
                       onBlur={field.handleBlur}
                       onChange={(event) => field.handleChange(event.target.value)}
                     />
+                    {field.state.meta.isTouched && <FieldError errors={field.state.meta.errors} />}
+                  </Field>
+                )}
+              </form.Field>
+              <form.Field name="confirmPassword">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor="confirmPassword">Retype password</FieldLabel>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      minLength={8}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(event) => field.handleChange(event.target.value)}
+                    />
+                    {field.state.meta.isTouched && <FieldError errors={field.state.meta.errors} />}
                   </Field>
                 )}
               </form.Field>
@@ -125,9 +150,16 @@ function CreateAdminPage() {
                 <AlertDescription>{error.message}</AlertDescription>
               </Alert>
             ) : null}
-            <Button type="submit" disabled={create.isPending || available.data === false}>
-              Create admin
-            </Button>
+            <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+              {([canSubmit, isSubmitting]) => (
+                <Button
+                  type="submit"
+                  disabled={!canSubmit || isSubmitting || create.isPending || available.data === false}
+                >
+                  Create admin
+                </Button>
+              )}
+            </form.Subscribe>
           </form>
         </CardContent>
       </Card>

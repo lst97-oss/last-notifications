@@ -15,11 +15,20 @@ const businessAuthEnvSchema = z
     GOOGLE_CLIENT_ID: optionalCredential,
     GOOGLE_CLIENT_SECRET: optionalCredential,
     AUTH_BOOTSTRAP_EMAIL: optionalCredential,
+    TURNSTILE_SECRET_KEY: optionalCredential,
+    TURNSTILE_SITE_KEY: optionalCredential,
   })
   .refine(({ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET }) => Boolean(GOOGLE_CLIENT_ID) === Boolean(GOOGLE_CLIENT_SECRET), {
     message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured together',
     path: ['GOOGLE_CLIENT_ID'],
   })
+  .refine(
+    ({ TURNSTILE_SECRET_KEY, TURNSTILE_SITE_KEY }) => Boolean(TURNSTILE_SECRET_KEY) === Boolean(TURNSTILE_SITE_KEY),
+    {
+      message: 'TURNSTILE_SECRET_KEY and TURNSTILE_SITE_KEY must be configured together',
+      path: ['TURNSTILE_SECRET_KEY'],
+    },
+  )
   .refine(
     ({ NODE_ENV, BETTER_AUTH_SECRET }) => NODE_ENV !== 'production' || !productionSecretProblem(BETTER_AUTH_SECRET),
     { message: 'BETTER_AUTH_SECRET is a placeholder or too short for production', path: ['BETTER_AUTH_SECRET'] },
@@ -66,4 +75,14 @@ export function getBootstrapEmail(
 ): string | null {
   const raw = source.AUTH_BOOTSTRAP_EMAIL?.trim()
   return raw ? raw.toLowerCase() : null
+}
+
+// Turnstile is opt-in: without the pair, sign-in stays password-only. The site
+// key is public (the browser needs it); only the secret is sensitive.
+export function getTurnstileConfig(
+  source: Record<string, string | undefined> = typeof Bun !== 'undefined' ? Bun.env : process.env,
+): { secretKey: string; siteKey: string } | null {
+  const env = businessAuthEnvSchema.parse(source)
+  if (!env.TURNSTILE_SECRET_KEY || !env.TURNSTILE_SITE_KEY) return null
+  return { secretKey: env.TURNSTILE_SECRET_KEY, siteKey: env.TURNSTILE_SITE_KEY }
 }
